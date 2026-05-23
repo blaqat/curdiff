@@ -40,6 +40,14 @@ const createEditorOpener = ({ platform = process.platform, shell }) => {
       }
     }
 
+    for (const command of ['/opt/homebrew/bin/cursor', '/usr/local/bin/cursor', 'cursor']) {
+      commands.push({ args: ['-g', absolutePath], command });
+    }
+
+    if (platform === 'darwin') {
+      commands.push({ args: ['-a', 'Cursor', absolutePath], command: 'open' });
+    }
+
     for (const command of ['/opt/homebrew/bin/code', '/usr/local/bin/code', 'code']) {
       commands.push({
         args: ['-g', absolutePath],

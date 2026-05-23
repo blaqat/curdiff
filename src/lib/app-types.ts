@@ -61,7 +61,7 @@ export type DiffLineCount = {
 export type ReviewComment = {
   author?: PullRequestExistingReviewComment['author'];
   body: string;
-  codexReply?: {
+  cursorReply?: {
     body?: string;
     error?: string;
     status: 'error' | 'loading' | 'ready';

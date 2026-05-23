@@ -15,8 +15,9 @@ const codiff = {
     ipcRenderer.invoke('codiff:getRepositoryHistory', limit, source),
   getRepositoryState: (source) => ipcRenderer.invoke('codiff:getRepositoryState', source),
   getTerminalHelperStatus: () => ipcRenderer.invoke('codiff:getTerminalHelperStatus'),
-  getWalkthrough: (source) => ipcRenderer.invoke('codiff:getWalkthrough', source),
+  getWalkthrough: (request) => ipcRenderer.invoke('codiff:getWalkthrough', request),
   installTerminalHelper: () => ipcRenderer.invoke('codiff:installTerminalHelper'),
+  listModels: () => ipcRenderer.invoke('codiff:listModels'),
   onConfigChanged: (callback) => {
     /** @param {Electron.IpcRendererEvent} _event @param {import('../src/config/types.ts').CodiffConfig} nextConfig */
     const listener = (_event, nextConfig) => callback(nextConfig);
@@ -60,6 +61,7 @@ const codiff = {
     ipcRenderer.invoke('codiff:submitPullRequestComment', request),
   submitPullRequestReview: (request) =>
     ipcRenderer.invoke('codiff:submitPullRequestReview', request),
+  updateSettings: (partial) => ipcRenderer.invoke('codiff:updateSettings', partial),
 };
 
 contextBridge.exposeInMainWorld('codiff', codiff);

@@ -24,11 +24,12 @@ const SCHEMA_URL =
 
 /** @type {CodiffSettings} */
 const defaultSettings = {
+  askModel: 'composer-2.5',
   copyCommentsOnClose: false,
   lastRepositoryPath: '',
-  openAIModel: 'gpt-5.3-codex-spark',
   showWhitespace: false,
   theme: 'system',
+  walkthroughModel: 'composer-2.5',
 };
 
 /** @type {CodiffKeymap} */
@@ -133,6 +134,30 @@ const normalizeTheme = (theme) =>
 const normalizeLastRepositoryPath = (path) =>
   typeof path === 'string' && path.length > 0 ? path : '';
 
+/** @param {unknown} value @returns {ModelParameterValue[] | undefined} */
+const normalizeModelParams = (value) => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const params = value
+    .filter(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        typeof entry.id === 'string' &&
+        typeof entry.value === 'string' &&
+        entry.id.trim().length > 0 &&
+        entry.value.trim().length > 0,
+    )
+    .map((entry) => ({
+      id: entry.id.trim(),
+      value: entry.value.trim(),
+    }));
+
+  return params.length > 0 ? params : undefined;
+};
+
 /**
  * Merge a partial config object on top of defaults.
  * @param {unknown} raw
@@ -187,20 +212,24 @@ const mergeConfig = (raw) => {
           : defaultKeymap.toggleSidebar,
     },
     settings: {
+      askModel:
+        typeof rawSettings.askModel === 'string' ? rawSettings.askModel : defaultSettings.askModel,
       copyCommentsOnClose:
         typeof rawSettings.copyCommentsOnClose === 'boolean'
           ? rawSettings.copyCommentsOnClose
           : defaultSettings.copyCommentsOnClose,
       lastRepositoryPath: normalizeLastRepositoryPath(rawSettings.lastRepositoryPath),
-      openAIModel:
-        typeof rawSettings.openAIModel === 'string'
-          ? rawSettings.openAIModel
-          : defaultSettings.openAIModel,
       showWhitespace:
         typeof rawSettings.showWhitespace === 'boolean'
           ? rawSettings.showWhitespace
           : defaultSettings.showWhitespace,
       theme: normalizeTheme(rawSettings.theme),
+      walkthroughModel:
+        typeof rawSettings.walkthroughModel === 'string'
+          ? rawSettings.walkthroughModel
+          : defaultSettings.walkthroughModel,
+      askModelParams: normalizeModelParams(rawSettings.askModelParams),
+      walkthroughModelParams: normalizeModelParams(rawSettings.walkthroughModelParams),
     },
   };
 };
@@ -260,9 +289,8 @@ const initConfig = () => {
 /**
  * Migrate from the old preferences.json (in Electron's userData) to the new config file.
  * @param {string} userDataPath - Electron's app.getPath('userData')
- * @param {(model: string) => string} normalizeOpenAIModel
  */
-const migrateFromPreferences = (userDataPath, normalizeOpenAIModel) => {
+const migrateFromPreferences = (userDataPath) => {
   const oldPath = join(userDataPath, 'preferences.json');
 
   if (!existsSync(oldPath)) {
@@ -284,9 +312,9 @@ const migrateFromPreferences = (userDataPath, normalizeOpenAIModel) => {
     const oldPrefs = JSON.parse(readFileSync(oldPath, 'utf8'));
     const config = mergeConfig({
       settings: {
-        ...oldPrefs,
+        copyCommentsOnClose: oldPrefs?.copyCommentsOnClose,
         lastRepositoryPath: normalizeLastRepositoryPath(oldPrefs?.lastRepositoryPath),
-        openAIModel: normalizeOpenAIModel(oldPrefs?.openAIModel ?? defaultSettings.openAIModel),
+        showWhitespace: oldPrefs?.showWhitespace,
         theme: normalizeTheme(oldPrefs?.theme),
       },
     });
@@ -344,11 +372,14 @@ const watchConfig = (onChange) => {
  * @returns {CodiffPreferences}
  */
 const configToPreferences = (config) => ({
+  askModel: config.settings.askModel,
+  askModelParams: config.settings.askModelParams,
   copyCommentsOnClose: config.settings.copyCommentsOnClose,
   lastRepositoryPath: config.settings.lastRepositoryPath,
-  openAIModel: config.settings.openAIModel,
   showWhitespace: config.settings.showWhitespace,
   theme: config.settings.theme,
+  walkthroughModel: config.settings.walkthroughModel,
+  walkthroughModelParams: config.settings.walkthroughModelParams,
 });
 
 module.exports = {

@@ -17,6 +17,32 @@ const { createEditorOpener } = require('../main/editor.cjs') as {
   };
 };
 
+test('prefers Cursor CLI before VS Code', () => {
+  const opener = createEditorOpener({
+    shell: { openPath: async () => '' },
+  });
+
+  const commands = opener.getEditorCommands('/repo/src/App.tsx');
+  const cursorIndex = commands.findIndex((c) => c.command === 'cursor' && c.args[0] === '-g');
+  const codeIndex = commands.findIndex((c) => c.command === 'code' && c.args[0] === '-g');
+
+  expect(cursorIndex).toBeGreaterThanOrEqual(0);
+  expect(codeIndex).toBeGreaterThanOrEqual(0);
+  expect(cursorIndex).toBeLessThan(codeIndex);
+});
+
+test('includes macOS Cursor app launch', () => {
+  const opener = createEditorOpener({
+    platform: 'darwin',
+    shell: { openPath: async () => '' },
+  });
+
+  expect(opener.getEditorCommands('/repo/src/App.tsx')).toContainEqual({
+    args: ['-a', 'Cursor', '/repo/src/App.tsx'],
+    command: 'open',
+  });
+});
+
 test('falls back to the macOS default text editor for text files without app associations', () => {
   const opener = createEditorOpener({
     platform: 'darwin',

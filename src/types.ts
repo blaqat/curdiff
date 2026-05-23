@@ -118,10 +118,40 @@ export type WalkthroughResult =
       walkthrough: Walkthrough;
     }
   | {
-      code?: 'CODEX_NOT_FOUND';
+      code?: 'CURSOR_UNAVAILABLE';
       reason: string;
       status: 'unavailable';
     };
+
+export type ModelParameterValue = {
+  id: string;
+  value: string;
+};
+
+export type ModelParameterDefinition = {
+  id: string;
+  label?: string;
+  values: ReadonlyArray<{ label?: string; value: string }>;
+};
+
+export type ModelVariant = {
+  description?: string;
+  isDefault?: boolean;
+  label: string;
+  params: ReadonlyArray<ModelParameterValue>;
+};
+
+export type CodiffModel = {
+  id: string;
+  label?: string;
+  parameters?: ReadonlyArray<ModelParameterDefinition>;
+  variants?: ReadonlyArray<ModelVariant>;
+};
+
+export type ModelSelection = {
+  id: string;
+  params?: ReadonlyArray<ModelParameterValue>;
+};
 
 export type ReviewAssistantRequest = {
   comment: {
@@ -133,6 +163,7 @@ export type ReviewAssistantRequest = {
     startLineNumber?: number;
     startSide?: 'additions' | 'deletions';
   };
+  model?: string | ModelSelection;
   source?: ReviewSource;
   walkthroughNote?: {
     action: WalkthroughFile['action'];
@@ -150,7 +181,7 @@ export type ReviewAssistantResult =
       status: 'ready';
     }
   | {
-      code?: 'CODEX_NOT_FOUND';
+      code?: 'CURSOR_UNAVAILABLE';
       reason: string;
       status: 'unavailable';
     };
@@ -195,11 +226,14 @@ export type DiffImageContentResult =
 export type CodiffTheme = 'system' | 'light' | 'dark';
 
 export type CodiffPreferences = {
+  askModel: string;
+  askModelParams?: ReadonlyArray<ModelParameterValue>;
   copyCommentsOnClose: boolean;
   lastRepositoryPath: string;
-  openAIModel: string;
   showWhitespace: boolean;
   theme: CodiffTheme;
+  walkthroughModel: string;
+  walkthroughModelParams?: ReadonlyArray<ModelParameterValue>;
 };
 
 export type PullRequestReviewComment = {

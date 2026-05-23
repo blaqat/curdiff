@@ -26,7 +26,11 @@ const {
   submitPullRequestReview,
   validateRepositoryPath,
 } = require('./git-state.cjs');
-const { FALLBACK_OPENAI_MODEL, normalizeOpenAIModel, OPENAI_MODELS } = require('./codex.cjs');
+const {
+  listCursorModels,
+  reconcileModelSelection,
+  resolveModelSelection,
+} = require('./cursor-agent.cjs');
 const {
   configToPreferences,
   defaultConfig,
@@ -110,9 +114,6 @@ const updateConfig = (nextConfig) => {
     settings: {
       ...config.settings,
       ...nextConfig.settings,
-      openAIModel: normalizeOpenAIModel(
-        nextConfig.settings?.openAIModel ?? config.settings.openAIModel,
-      ),
     },
   };
   nativeTheme.themeSource = config.settings.theme;
@@ -120,25 +121,6 @@ const updateConfig = (nextConfig) => {
   sendConfigChanged();
   Menu.setApplicationMenu(buildApplicationMenu());
 };
-
-/** @param {string} model */
-const selectOpenAIModel = (model) => {
-  const openAIModel = normalizeOpenAIModel(model);
-  if (config.settings.openAIModel === openAIModel) {
-    return;
-  }
-
-  updateConfig({ settings: { ...config.settings, openAIModel } });
-};
-
-const getCodexOptions = () => ({
-  fallbackModel: FALLBACK_OPENAI_MODEL,
-  model: config.settings.openAIModel,
-  /** @param {string} fallbackModel */
-  onModelFallback: async (fallbackModel) => {
-    updateConfig({ settings: { ...config.settings, openAIModel: fallbackModel } });
-  },
-});
 
 /** @param {CodiffTheme} theme */
 const updateTheme = (theme) => {
@@ -240,15 +222,6 @@ const openRepositoryFolder = async (browserWindow) => {
   }
 };
 
-/** @returns {Array<import('electron').MenuItemConstructorOptions>} */
-const buildOpenAIModelSubmenu = () =>
-  OPENAI_MODELS.map((model) => ({
-    checked: config.settings.openAIModel === model.id,
-    click: () => selectOpenAIModel(model.id),
-    label: model.label,
-    type: 'radio',
-  }));
-
 /** @returns {import('electron').Menu} */
 const buildApplicationMenu = () =>
   Menu.buildFromTemplate(
@@ -259,11 +232,6 @@ const buildApplicationMenu = () =>
               label: 'Codiff',
               submenu: [
                 { role: 'about' },
-                { type: 'separator' },
-                {
-                  label: 'OpenAI Model',
-                  submenu: buildOpenAIModelSubmenu(),
-                },
                 { type: 'separator' },
                 {
                   click: () => {
@@ -295,11 +263,6 @@ const buildApplicationMenu = () =>
           ...(process.platform === 'darwin'
             ? []
             : [
-                {
-                  label: 'OpenAI Model',
-                  submenu: buildOpenAIModelSubmenu(),
-                },
-                { type: 'separator' },
                 {
                   click: () => {
                     void openConfigFile();
@@ -564,9 +527,8 @@ if (squirrelStartup || !lock) {
   });
 
   app.on('ready', () => {
-    migrateFromPreferences(app.getPath('userData'), normalizeOpenAIModel);
+    migrateFromPreferences(app.getPath('userData'));
     config = readConfig();
-    config.settings.openAIModel = normalizeOpenAIModel(config.settings.openAIModel);
     nativeTheme.themeSource = config.settings.theme;
     Menu.setApplicationMenu(buildApplicationMenu());
     const launchOptions = getLaunchOptions();
@@ -576,13 +538,7 @@ if (squirrelStartup || !lock) {
     );
 
     watchConfig((nextConfig) => {
-      config = {
-        ...nextConfig,
-        settings: {
-          ...nextConfig.settings,
-          openAIModel: normalizeOpenAIModel(nextConfig.settings.openAIModel),
-        },
-      };
+      config = nextConfig;
       nativeTheme.themeSource = config.settings.theme;
       sendConfigChanged();
       Menu.setApplicationMenu(buildApplicationMenu());
@@ -665,19 +621,36 @@ ipcMain.handle('codiff:installTerminalHelper', async (event) => {
   return getTerminalHelperStatus();
 });
 
-ipcMain.handle('codiff:getWalkthrough', async (event, source) => {
+ipcMain.handle('codiff:getWalkthrough', async (event, request) => {
+  const source = request?.source ?? request;
+  const models = await listCursorModels();
+  const model = reconcileModelSelection(
+    models,
+    resolveModelSelection(
+      request?.model,
+      config.settings.walkthroughModel,
+      config.settings.walkthroughModelParams,
+    ),
+  );
   const repositoryPath = windowRepositories.get(event.sender.id) || getLaunchPath();
   const launchOptions = windowLaunchOptions.get(event.sender.id);
   const state = await readRepositoryState(repositoryPath, source || launchOptions?.source);
-  return readWalkthrough(state, getCodexOptions());
+  return readWalkthrough(state, { model });
 });
 
 ipcMain.handle('codiff:askReviewAssistant', async (event, request) => {
+  const model = resolveModelSelection(
+    request?.model,
+    config.settings.askModel,
+    config.settings.askModelParams,
+  );
   const repositoryPath = windowRepositories.get(event.sender.id) || getLaunchPath();
   const launchOptions = windowLaunchOptions.get(event.sender.id);
   const state = await readRepositoryState(repositoryPath, request?.source || launchOptions?.source);
-  return readReviewAssistantReply(state, request, getCodexOptions());
+  return readReviewAssistantReply(state, request, { model });
 });
+
+ipcMain.handle('codiff:listModels', () => listCursorModels());
 
 ipcMain.handle('codiff:submitPullRequestComment', async (event, request) => {
   const repositoryPath = windowRepositories.get(event.sender.id) || getLaunchPath();
@@ -712,6 +685,10 @@ ipcMain.handle('codiff:getGitIdentity', async (event) => {
 ipcMain.handle('codiff:getPreferences', () => configToPreferences(config));
 
 ipcMain.handle('codiff:getConfig', () => config);
+
+ipcMain.handle('codiff:updateSettings', (_event, partial) => {
+  updateConfig({ settings: { ...config.settings, ...partial } });
+});
 
 ipcMain.handle('codiff:openConfigFile', () => openConfigFile());
 

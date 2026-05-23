@@ -37,6 +37,7 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.13",
     "@phosphor-icons/react": "^2.1.10",
     "@pierre/diffs": "1.2.1",
     "@pierre/trees": "1.0.0-beta.4",
@@ -84,6 +85,11 @@
     "pnpm": ">=11.0.0"
   },
   "packageManager": "pnpm@11.0.6",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sqlite3"
+    ]
+  },
   "build": {
     "appId": "dev.nkzw-tech.codiff",
     "copyright": "Copyright © 2026-current Nakazawa Tech",

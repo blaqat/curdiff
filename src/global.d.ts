@@ -1,5 +1,6 @@
 import type { CodiffConfig } from './config/types.ts';
 import type {
+  CodiffModel,
   CodiffPreferences,
   CodiffLaunchOptions,
   DiffImageContentRequest,
@@ -7,6 +8,7 @@ import type {
   DiffSection,
   DiffSectionContentRequest,
   GitIdentity,
+  ModelSelection,
   RepositoryHistory,
   RepositoryState,
   ReviewAssistantRequest,
@@ -32,8 +34,11 @@ declare global {
       getRepositoryHistory: (limit?: number, source?: ReviewSource) => Promise<RepositoryHistory>;
       getRepositoryState: (source?: ReviewSource) => Promise<RepositoryState>;
       getTerminalHelperStatus: () => Promise<TerminalHelperStatus>;
-      getWalkthrough: (source?: ReviewSource) => Promise<WalkthroughResult>;
+      getWalkthrough: (
+        request?: ReviewSource | { model?: string | ModelSelection; source?: ReviewSource },
+      ) => Promise<WalkthroughResult>;
       installTerminalHelper: () => Promise<TerminalHelperStatus>;
+      listModels: () => Promise<Array<CodiffModel>>;
       onConfigChanged: (callback: (config: CodiffConfig) => void) => () => void;
       onCopyPendingCommentsRequest: (callback: () => string | Promise<string>) => () => void;
       onFindInDiffs: (callback: () => void) => () => void;
@@ -45,6 +50,7 @@ declare global {
         request: SubmitPullRequestCommentRequest,
       ) => Promise<PullRequestExistingReviewComment>;
       submitPullRequestReview: (request: SubmitPullRequestReviewRequest) => Promise<void>;
+      updateSettings: (settings: Partial<CodiffConfig['settings']>) => Promise<void>;
     };
   }
 }

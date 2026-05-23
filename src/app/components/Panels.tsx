@@ -110,26 +110,20 @@ export function RepositoryLoadErrorPanel({ error }: { error: RepositoryLoadError
   );
 }
 
-export function CodexUnavailablePanel({ onShowFiles }: { onShowFiles: () => void }) {
+export function CursorUnavailablePanel({ onShowFiles }: { onShowFiles: () => void }) {
   return (
     <>
-      <strong>Codex CLI not found</strong>
+      <strong>Cursor unavailable</strong>
       <p>
-        Install Codex, then verify <code className="walkthrough-inline-code">codex --version</code>{' '}
-        works in Terminal.
+        Set <code className="walkthrough-inline-code">CURSOR_API_KEY</code> from{' '}
+        <a href="https://cursor.com/dashboard/integrations">Cursor Dashboard → Integrations</a>,
+        then restart Codiff.
       </p>
+      <p>When launching from Terminal, export the key in your shell profile or pass it inline:</p>
       <p>
-        Codiff checks <code className="walkthrough-inline-code">PATH</code>,{' '}
-        <code className="walkthrough-inline-code">/opt/homebrew/bin/codex</code>, and{' '}
-        <code className="walkthrough-inline-code">/usr/local/bin/codex</code>. It does not run shell
-        startup files.
-      </p>
-      <p>
-        If Codex is somewhere else, launch Codiff with{' '}
         <code className="walkthrough-inline-code">
-          CODIFF_CODEX_PATH=/absolute/path/to/codex codiff -w
+          export CURSOR_API_KEY=&quot;cursor_...&quot;
         </code>
-        .
       </p>
       <div className="empty-panel-actions">
         <button onClick={onShowFiles} type="button">

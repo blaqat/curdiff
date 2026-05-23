@@ -9,7 +9,7 @@ import {
 import { CommandBar } from './app/components/CommandBar.tsx';
 import {
   CopyCommentsButton,
-  CodexUnavailablePanel,
+  CursorUnavailablePanel,
   DiffSearchPanel,
   FirstRunPanel,
   PullRequestReviewButtons,
@@ -49,6 +49,7 @@ import {
   shouldLoadDiffSectionContents,
 } from './lib/diff.ts';
 import { compactPath, fuzzyMatches, sortFiles } from './lib/files.ts';
+import { getModelById, reconcileModelSelection, resolveDefaultParams } from './lib/models.ts';
 import {
   buildReviewCommentsMarkdown,
   getCommentKey,
@@ -73,9 +74,12 @@ import {
 import type {
   ChangedFile,
   CodiffLaunchOptions,
+  CodiffModel,
   CodiffPreferences,
   GitIdentity,
   HistoryEntry,
+  ModelParameterValue,
+  ModelSelection,
   PullRequestReviewEvent,
   RepositoryState,
   ReviewAssistantRequest,
@@ -145,6 +149,14 @@ export default function App() {
   const [walkthroughError, setWalkthroughError] = useState<WalkthroughError | null>(null);
   const [walkthroughLoading, setWalkthroughLoading] = useState(false);
   const [walkthroughUnread, setWalkthroughUnread] = useState(false);
+  const [availableModels, setAvailableModels] = useState<ReadonlyArray<CodiffModel>>([]);
+  const availableModelsRef = useRef<ReadonlyArray<CodiffModel>>([]);
+  const [askModelSelection, setAskModelSelection] = useState<ModelSelection>({
+    id: defaultPreferences.askModel,
+  });
+  const [walkthroughModelSelection, setWalkthroughModelSelection] = useState<ModelSelection>({
+    id: defaultPreferences.walkthroughModel,
+  });
   const historyRequestRef = useRef(0);
   const loadingSectionKeysRef = useRef<Set<string>>(new Set());
   const programmaticScrollPathRef = useRef<string | null>(null);
@@ -163,6 +175,10 @@ export default function App() {
   const [commandBarVisible, setCommandBarVisible] = useState(false);
   const [commandBarCommands, setCommandBarCommands] = useState<ReadonlyArray<Command>>([]);
   const commandRegistryRef = useRef(createCommandRegistry());
+
+  const persistSettings = useCallback((partial: Partial<CodiffConfig['settings']>) => {
+    void window.codiff.updateSettings(partial);
+  }, []);
 
   const bumpItemVersion = useCallback((path: string) => {
     setItemVersionByPath((current) => ({
@@ -224,47 +240,17 @@ export default function App() {
         return;
       }
 
-      const shouldLoadWalkthrough = nextLaunchOptions.walkthrough && orderedState.files.length > 0;
+      const shouldOpenWalkthroughTab = nextLaunchOptions.walkthrough;
       const shouldStartInHistory =
         orderedState.source.type === 'working-tree' && orderedState.files.length === 0;
 
-      setLaunchOptions({
-        ...nextLaunchOptions,
-        walkthrough: shouldLoadWalkthrough,
-      });
       setSidebarMode(
-        shouldLoadWalkthrough ? 'walkthrough' : shouldStartInHistory ? 'history' : 'tree',
+        shouldOpenWalkthroughTab ? 'walkthrough' : shouldStartInHistory ? 'history' : 'tree',
       );
-      setWalkthroughLoading(shouldLoadWalkthrough);
-
-      const walkthroughResult = shouldLoadWalkthrough
-        ? await window.codiff.getWalkthrough(orderedState.source)
-        : null;
-
-      if (canceled) {
-        return;
-      }
-
-      const nextWalkthrough =
-        walkthroughResult?.status === 'ready' ? walkthroughResult.walkthrough : null;
-
-      if (walkthroughResult?.status === 'unavailable') {
-        setWalkthroughError(walkthroughResult);
-        if (walkthroughResult.code !== 'CODEX_NOT_FOUND') {
-          setSidebarMode('tree');
-        }
-      } else {
-        setWalkthroughError(null);
-      }
-
-      setWalkthrough(nextWalkthrough);
-      setWalkthroughLoading(false);
 
       const nextViewed =
         orderedState.source.type === 'working-tree' ? readViewed(orderedState.root) : {};
-      const initialFiles = nextLaunchOptions.walkthrough
-        ? orderFilesByWalkthrough(orderedState.files, nextWalkthrough)
-        : orderedState.files;
+      const initialFiles = orderedState.files;
 
       setHistoryEntries(history.entries);
       setHistoryHasMore(history.entries.length >= HISTORY_PAGE_SIZE);
@@ -560,17 +546,43 @@ export default function App() {
   }, [bumpItemVersion, diffSearchQuery, fileSearchQuery, preferences.showWhitespace, state]);
 
   useEffect(() => {
+    window.codiff
+      .listModels()
+      .then((models) => {
+        setAvailableModels(models);
+        if (models.length === 0) {
+          return;
+        }
+
+        setAskModelSelection((current) => reconcileModelSelection(models, current));
+        setWalkthroughModelSelection((current) => reconcileModelSelection(models, current));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let canceled = false;
 
     window.codiff.getConfig().then((nextConfig) => {
       if (!canceled) {
         setCodiffConfig(nextConfig);
         setPreferences({
+          askModel: nextConfig.settings.askModel,
+          askModelParams: nextConfig.settings.askModelParams,
           copyCommentsOnClose: nextConfig.settings.copyCommentsOnClose,
           lastRepositoryPath: nextConfig.settings.lastRepositoryPath,
-          openAIModel: nextConfig.settings.openAIModel,
           showWhitespace: nextConfig.settings.showWhitespace,
           theme: nextConfig.settings.theme,
+          walkthroughModel: nextConfig.settings.walkthroughModel,
+          walkthroughModelParams: nextConfig.settings.walkthroughModelParams,
+        });
+        setAskModelSelection({
+          id: nextConfig.settings.askModel,
+          params: nextConfig.settings.askModelParams,
+        });
+        setWalkthroughModelSelection({
+          id: nextConfig.settings.walkthroughModel,
+          params: nextConfig.settings.walkthroughModelParams,
         });
       }
     });
@@ -578,11 +590,22 @@ export default function App() {
     const removeConfigListener = window.codiff.onConfigChanged((nextConfig) => {
       setCodiffConfig(nextConfig);
       setPreferences({
+        askModel: nextConfig.settings.askModel,
+        askModelParams: nextConfig.settings.askModelParams,
         copyCommentsOnClose: nextConfig.settings.copyCommentsOnClose,
         lastRepositoryPath: nextConfig.settings.lastRepositoryPath,
-        openAIModel: nextConfig.settings.openAIModel,
         showWhitespace: nextConfig.settings.showWhitespace,
         theme: nextConfig.settings.theme,
+        walkthroughModel: nextConfig.settings.walkthroughModel,
+        walkthroughModelParams: nextConfig.settings.walkthroughModelParams,
+      });
+      setAskModelSelection({
+        id: nextConfig.settings.askModel,
+        params: nextConfig.settings.askModelParams,
+      });
+      setWalkthroughModelSelection({
+        id: nextConfig.settings.walkthroughModel,
+        params: nextConfig.settings.walkthroughModelParams,
       });
     });
 
@@ -617,6 +640,10 @@ export default function App() {
   useEffect(() => {
     sidebarModeRef.current = sidebarMode;
   }, [sidebarMode]);
+
+  useEffect(() => {
+    availableModelsRef.current = availableModels;
+  }, [availableModels]);
 
   useEffect(() => {
     collapsedRef.current = collapsed;
@@ -984,75 +1011,114 @@ export default function App() {
     handle.addEventListener('pointercancel', handleEnd);
   }, []);
 
-  const changeSidebarMode = useCallback(
-    (mode: SidebarMode) => {
-      if (mode === 'tree') {
-        setSidebarMode('tree');
-        return;
-      }
+  const changeSidebarMode = useCallback((mode: SidebarMode) => {
+    if (mode === 'tree') {
+      setSidebarMode('tree');
+      return;
+    }
 
-      if (mode === 'history') {
-        setSidebarMode('history');
-        return;
-      }
+    if (mode === 'history') {
+      setSidebarMode('history');
+      return;
+    }
 
-      setSidebarMode('walkthrough');
-      setWalkthroughUnread(false);
-      if (walkthrough || walkthroughLoading || !state) {
-        return;
-      }
-      if (state.files.length === 0) {
-        setWalkthrough(null);
-        setWalkthroughError(null);
-        setWalkthroughLoading(false);
-        return;
-      }
+    setSidebarMode('walkthrough');
+    setWalkthroughUnread(false);
+  }, []);
 
-      const sourceKey = getSourceKey(state.source);
-      setWalkthroughLoading(true);
-      setWalkthroughError(null);
-      window.codiff
-        .getWalkthrough(state.source)
-        .then((result) => {
-          if (getSourceKey(stateRef.current?.source ?? state.source) !== sourceKey) {
-            return;
-          }
-
-          if (result.status === 'ready') {
-            setWalkthrough(result.walkthrough);
-            if (sidebarModeRef.current === 'walkthrough') {
-              setSidebarMode('walkthrough');
-            } else {
-              setWalkthroughUnread(true);
-            }
-          } else {
-            setWalkthroughError(result);
-            if (sidebarModeRef.current === 'walkthrough' && result.code !== 'CODEX_NOT_FOUND') {
-              setSidebarMode('tree');
-            }
-          }
-        })
-        .catch((error: unknown) => {
-          if (getSourceKey(stateRef.current?.source ?? state.source) !== sourceKey) {
-            return;
-          }
-
-          setWalkthroughError({
-            reason: error instanceof Error ? error.message : String(error),
-            status: 'unavailable',
-          });
-          if (sidebarModeRef.current === 'walkthrough') {
-            setSidebarMode('tree');
-          }
-        })
-        .finally(() => {
-          if (getSourceKey(stateRef.current?.source ?? state.source) === sourceKey) {
-            setWalkthroughLoading(false);
-          }
-        });
+  const handleWalkthroughModelChange = useCallback(
+    (modelId: string) => {
+      const model = getModelById(availableModels, modelId);
+      const params = resolveDefaultParams(model);
+      const selection = params.length > 0 ? { id: modelId, params } : { id: modelId };
+      setWalkthroughModelSelection(selection);
+      persistSettings({
+        walkthroughModel: modelId,
+        walkthroughModelParams: params.length > 0 ? params : undefined,
+      });
     },
-    [state, walkthrough, walkthroughLoading],
+    [availableModels, persistSettings],
   );
+
+  const handleWalkthroughModelParamsChange = useCallback(
+    (params: Array<ModelParameterValue>) => {
+      setWalkthroughModelSelection((current) => ({ ...current, params }));
+      persistSettings({ walkthroughModelParams: params });
+    },
+    [persistSettings],
+  );
+
+  const handleAskModelChange = useCallback(
+    (modelId: string) => {
+      const model = getModelById(availableModels, modelId);
+      const params = resolveDefaultParams(model);
+      const selection = params.length > 0 ? { id: modelId, params } : { id: modelId };
+      setAskModelSelection(selection);
+      persistSettings({
+        askModel: modelId,
+        askModelParams: params.length > 0 ? params : undefined,
+      });
+    },
+    [availableModels, persistSettings],
+  );
+
+  const handleAskModelParamsChange = useCallback(
+    (params: Array<ModelParameterValue>) => {
+      setAskModelSelection((current) => ({ ...current, params }));
+      persistSettings({ askModelParams: params });
+    },
+    [persistSettings],
+  );
+
+  const startWalkthrough = useCallback(() => {
+    const currentState = stateRef.current;
+    if (!currentState || walkthroughLoading || currentState.files.length === 0) {
+      return;
+    }
+
+    const sourceKey = getSourceKey(currentState.source);
+    const models = availableModelsRef.current;
+    const modelSelection =
+      models.length > 0
+        ? reconcileModelSelection(models, walkthroughModelSelection)
+        : walkthroughModelSelection;
+    setWalkthroughLoading(true);
+    setWalkthroughError(null);
+
+    void window.codiff
+      .getWalkthrough({ model: modelSelection, source: currentState.source })
+      .then((result) => {
+        if (getSourceKey(stateRef.current?.source ?? currentState.source) !== sourceKey) {
+          return;
+        }
+
+        if (result.status === 'ready') {
+          setWalkthrough(result.walkthrough);
+          setWalkthroughError(null);
+          persistSettings({
+            walkthroughModel: modelSelection.id,
+            walkthroughModelParams: modelSelection.params ? [...modelSelection.params] : undefined,
+          });
+        } else {
+          setWalkthroughError(result);
+        }
+      })
+      .catch((error: unknown) => {
+        if (getSourceKey(stateRef.current?.source ?? currentState.source) !== sourceKey) {
+          return;
+        }
+
+        setWalkthroughError({
+          reason: error instanceof Error ? error.message : String(error),
+          status: 'unavailable',
+        });
+      })
+      .finally(() => {
+        if (getSourceKey(stateRef.current?.source ?? currentState.source) === sourceKey) {
+          setWalkthroughLoading(false);
+        }
+      });
+  }, [persistSettings, walkthroughLoading, walkthroughModelSelection]);
 
   useEffect(() => {
     const registry = commandRegistryRef.current;
@@ -1381,14 +1447,18 @@ export default function App() {
     setReviewComments((current) => current.filter((comment) => comment.id !== commentId));
   }, []);
 
-  const updateCodexReply = useCallback(
-    (commentId: string, filePath: string, codexReply: NonNullable<ReviewComment['codexReply']>) => {
+  const updateCursorReply = useCallback(
+    (
+      commentId: string,
+      filePath: string,
+      cursorReply: NonNullable<ReviewComment['cursorReply']>,
+    ) => {
       setReviewComments((current) =>
         current.map((comment) =>
           comment.id === commentId
             ? {
                 ...comment,
-                codexReply,
+                cursorReply,
               }
             : comment,
         ),
@@ -1418,7 +1488,7 @@ export default function App() {
     [bumpItemVersion],
   );
 
-  const askCodex = useCallback(
+  const askCursor = useCallback(
     (commentId: string) => {
       const currentState = stateRef.current;
       const comment = reviewCommentsRef.current.find((candidate) => candidate.id === commentId);
@@ -1426,7 +1496,7 @@ export default function App() {
         !currentState ||
         !comment ||
         comment.body.trim().length === 0 ||
-        comment.codexReply?.status === 'loading'
+        comment.cursorReply?.status === 'loading'
       ) {
         return;
       }
@@ -1441,6 +1511,7 @@ export default function App() {
           side: comment.side,
           ...getReviewCommentRangeProps(comment),
         },
+        model: askModelSelection,
         source: currentState.source,
         walkthroughNote: note
           ? {
@@ -1454,11 +1525,11 @@ export default function App() {
           : undefined,
       };
 
-      updateCodexReply(comment.id, comment.filePath, { status: 'loading' });
+      updateCursorReply(comment.id, comment.filePath, { status: 'loading' });
       void window.codiff
         .askReviewAssistant(request)
         .then((result) => {
-          updateCodexReply(
+          updateCursorReply(
             comment.id,
             comment.filePath,
             result.status === 'ready'
@@ -1471,15 +1542,21 @@ export default function App() {
                   status: 'error',
                 },
           );
+          if (result.status === 'ready') {
+            persistSettings({
+              askModel: askModelSelection.id,
+              askModelParams: askModelSelection.params ? [...askModelSelection.params] : undefined,
+            });
+          }
         })
         .catch((error: unknown) => {
-          updateCodexReply(comment.id, comment.filePath, {
+          updateCursorReply(comment.id, comment.filePath, {
             error: error instanceof Error ? error.message : String(error),
             status: 'error',
           });
         });
     },
-    [updateCodexReply, walkthroughNotes],
+    [askModelSelection, persistSettings, updateCursorReply, walkthroughNotes],
   );
 
   const submitPullRequestComment = useCallback(
@@ -1615,11 +1692,7 @@ export default function App() {
   }
 
   if (!state) {
-    return (
-      <main className={`loading italic${launchOptions.walkthrough ? ' codex' : ' pulse'}`}>
-        {launchOptions.walkthrough ? 'Waiting on Codex…' : 'Thinking…'}
-      </main>
-    );
+    return <main className="loading pulse italic">Thinking…</main>;
   }
 
   const selectedOrSearchPath = activeDiffSearchMatch?.filePath ?? selectedPath;
@@ -1630,11 +1703,11 @@ export default function App() {
   const hasDiffSearchQuery = diffSearchQuery.trim().length > 0;
   const isPullRequest = state.source.type === 'pull-request';
   const isSwitchingSource = pendingSource != null;
-  const showCodexUnavailablePanel =
+  const showCursorUnavailablePanel =
     sidebarMode === 'walkthrough' &&
     !walkthrough &&
     !walkthroughLoading &&
-    walkthroughError?.code === 'CODEX_NOT_FOUND';
+    walkthroughError?.code === 'CURSOR_UNAVAILABLE';
 
   const sidebarLabel = `${compactPath(state.root)}${state.branch ? ` (${state.branch})` : ''}`;
   const sidebarSourceLabel =
@@ -1747,6 +1820,7 @@ export default function App() {
           </div>
         </div>
         <Sidebar
+          availableModels={availableModels}
           currentSource={pendingSource ?? state.source}
           files={visibleFiles}
           historyEntries={historyEntries}
@@ -1762,6 +1836,9 @@ export default function App() {
           }
           onSelectPath={selectPath}
           onSelectSource={selectSource}
+          onStartWalkthrough={startWalkthrough}
+          onWalkthroughModelChange={handleWalkthroughModelChange}
+          onWalkthroughModelParamsChange={handleWalkthroughModelParamsChange}
           pullRequestSource={historyPullRequestSource}
           searchQuery={sidebarMode === 'history' ? historySearchQuery : fileSearchQuery}
           selectedPath={visibleSelectedPath}
@@ -1769,7 +1846,9 @@ export default function App() {
           walkthroughAvailable={walkthrough != null}
           walkthroughError={walkthroughError}
           walkthroughLoading={walkthroughLoading}
+          walkthroughModelSelection={walkthroughModelSelection}
           walkthroughNotes={walkthroughNotes}
+          walkthroughStartDisabled={state.files.length === 0}
           walkthroughSummary={walkthrough?.summary ?? null}
           walkthroughUnread={walkthroughUnread}
         />
@@ -1778,10 +1857,10 @@ export default function App() {
       <main className="review">
         {isSwitchingSource ? (
           <ReviewSourceLoading />
-        ) : showCodexUnavailablePanel ? (
+        ) : showCursorUnavailablePanel ? (
           <div className="empty-state">
             <div className="empty-panel squircle">
-              <CodexUnavailablePanel onShowFiles={() => setSidebarMode('tree')} />
+              <CursorUnavailablePanel onShowFiles={() => setSidebarMode('tree')} />
             </div>
           </div>
         ) : state.files.length === 0 ? (
@@ -1813,6 +1892,8 @@ export default function App() {
         ) : (
           <ReviewCodeView
             activeSearchMatch={activeDiffSearchMatch}
+            askModelSelection={askModelSelection}
+            availableModels={availableModels}
             collapsed={collapsed}
             comments={reviewComments}
             files={visibleFiles}
@@ -1823,7 +1904,9 @@ export default function App() {
             isPullRequest={isPullRequest}
             itemVersionByPath={itemVersionByPath}
             keymap={codiffConfig.keymap}
-            onAskCodex={askCodex}
+            onAskCursor={askCursor}
+            onAskModelChange={handleAskModelChange}
+            onAskModelParamsChange={handleAskModelParamsChange}
             onCreateComment={createComment}
             onDeleteComment={deleteComment}
             onOpenFile={openFile}

@@ -1,12 +1,12 @@
 // @ts-check
 
 const {
-  CODEX_NOT_FOUND_CODE,
-  isCodexNotFoundError,
+  CURSOR_UNAVAILABLE_CODE,
+  isCursorUnavailableError,
   parseJSONMessage,
-  runCodex,
-  truncate,
-} = require('./codex.cjs');
+  runCursorAgent,
+} = require('./cursor-agent.cjs');
+const { truncate } = require('./text-utils.cjs');
 
 const MAX_PATCH_CHARS = 24_000;
 const MAX_OTHER_FILES = 40;
@@ -15,7 +15,7 @@ const MAX_OTHER_FILES = 40;
  * @typedef {import('../src/types.ts').ChangedFile} ChangedFile
  * @typedef {import('../src/types.ts').RepositoryState} RepositoryState
  * @typedef {import('../src/types.ts').ReviewAssistantRequest} ReviewAssistantRequest
- * @typedef {{model?: string; fallbackModel?: string; onModelFallback?: (fallbackModel: string, originalModel: string) => Promise<void> | void}} CodexOptions
+ * @typedef {{ model?: string }} CursorAgentOptions
  */
 
 const reviewAssistantSchema = {
@@ -81,9 +81,9 @@ const buildReviewAssistantInput = (state, request) => {
 };
 
 /** @param {RepositoryState} state @param {Partial<ReviewAssistantRequest> | null | undefined} request */
-const buildReviewAssistantPrompt = (state, request) => `You are Codex inside Codiff.
+const buildReviewAssistantPrompt = (state, request) => `You are a review assistant in Codiff.
 
-A human reviewer wrote a rough inline review note and clicked Ask Codex.
+A human reviewer wrote a rough inline review note and clicked Ask.
 Reply as a concise assistant in the same inline conversation.
 Use only the repository change digest below; do not inspect the repository or run shell commands.
 If there is walkthrough context, use it as review orientation, not as proof.
@@ -114,7 +114,7 @@ const cleanReply = (value, fallback = '') =>
 const normalizeReviewAssistantReply = (input) => ({
   reply: cleanReply(
     input && typeof input === 'object' && 'reply' in input ? input.reply : undefined,
-    'Codex could not produce a useful reply.',
+    'Could not produce a useful reply.',
   ),
   version: 1,
 });
@@ -122,18 +122,18 @@ const normalizeReviewAssistantReply = (input) => ({
 /**
  * @param {RepositoryState} state
  * @param {ReviewAssistantRequest} request
- * @param {CodexOptions} codexOptions
+ * @param {CursorAgentOptions} agentOptions
  */
-const readReviewAssistantReply = async (state, request, codexOptions) => {
+const readReviewAssistantReply = async (state, request, agentOptions) => {
   try {
-    const response = await runCodex(
-      state.root,
-      buildReviewAssistantPrompt(state, request),
-      reviewAssistantSchema,
-      'review-assistant.json',
-      'Codex review reply timed out.',
-      codexOptions,
-    );
+    const response = await runCursorAgent({
+      model: agentOptions.model,
+      prompt: buildReviewAssistantPrompt(state, request),
+      repoRoot: state.root,
+      schema: reviewAssistantSchema,
+      timeoutMs: 45_000,
+      useSandbox: false,
+    });
     const parsed = parseJSONMessage(response);
 
     return {
@@ -141,16 +141,24 @@ const readReviewAssistantReply = async (state, request, codexOptions) => {
       status: 'ready',
     };
   } catch (error) {
-    if (isCodexNotFoundError(error)) {
+    if (isCursorUnavailableError(error)) {
       return {
-        code: CODEX_NOT_FOUND_CODE,
+        code: CURSOR_UNAVAILABLE_CODE,
         reason: error instanceof Error ? error.message : String(error),
         status: 'unavailable',
       };
     }
 
+    const message = error instanceof Error ? error.message : String(error);
+    if (/timed out/i.test(message)) {
+      return {
+        reason: 'Cursor review reply timed out.',
+        status: 'unavailable',
+      };
+    }
+
     return {
-      reason: error instanceof Error ? error.message : String(error),
+      reason: message,
       status: 'unavailable',
     };
   }

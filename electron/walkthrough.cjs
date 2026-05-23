@@ -1,15 +1,13 @@
 // @ts-check
 
 const {
-  CODEX_NOT_FOUND_CODE,
-  cleanText,
-  isCodexNotFoundError,
-  normalizeEnum,
-  oneLine,
+  CURSOR_UNAVAILABLE_CODE,
+  isCursorUnavailableError,
   parseJSONMessage,
-  runCodex,
-  truncate,
-} = require('./codex.cjs');
+  runCursorAgent,
+  WALKTHROUGH_TIMEOUT_MS,
+} = require('./cursor-agent.cjs');
+const { cleanText, normalizeEnum, oneLine, truncate } = require('./text-utils.cjs');
 
 const MAX_TOTAL_PATCH_CHARS = 160_000;
 const MAX_SECTION_PATCH_CHARS = 4_000;
@@ -18,7 +16,7 @@ const MAX_SECTION_PATCH_CHARS = 4_000;
  * @typedef {import('../src/types.ts').ChangedFile} ChangedFile
  * @typedef {import('../src/types.ts').DiffSection} DiffSection
  * @typedef {import('../src/types.ts').RepositoryState} RepositoryState
- * @typedef {{model?: string; fallbackModel?: string; onModelFallback?: (fallbackModel: string, originalModel: string) => Promise<void> | void}} CodexOptions
+ * @typedef {{ model?: string }} CursorAgentOptions
  */
 
 const walkthroughSchema = {
@@ -66,6 +64,47 @@ const walkthroughSchema = {
   type: 'object',
 };
 
+/** @param {string} patch */
+const countPatchLines = (patch) => {
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      additions += 1;
+      continue;
+    }
+
+    if (line.startsWith('-')) {
+      deletions += 1;
+    }
+  }
+
+  return { additions, deletions };
+};
+
+/** @param {ChangedFile} file */
+const getFileLineStats = (file) => {
+  let additions = 0;
+  let deletions = 0;
+
+  for (const section of file.sections) {
+    if (section.binary) {
+      continue;
+    }
+
+    const stats = countPatchLines(section.patch || '');
+    additions += stats.additions;
+    deletions += stats.deletions;
+  }
+
+  return { additions, deletions };
+};
+
 /** @param {DiffSection} section @param {number} remainingBudget */
 const buildPatchExcerpt = (section, remainingBudget) => {
   const summary = section.summary?.reason ? `Summary: ${section.summary.reason}\n` : '';
@@ -87,23 +126,29 @@ const buildPromptInput = (state) => {
   let remainingPatchBudget = MAX_TOTAL_PATCH_CHARS;
 
   return {
-    files: state.files.map((file) => ({
-      oldPath: file.oldPath,
-      path: file.path,
-      sections: file.sections.map((section) => {
-        const patchExcerpt = buildPatchExcerpt(section, remainingPatchBudget);
-        remainingPatchBudget = Math.max(0, remainingPatchBudget - patchExcerpt.length);
+    files: state.files.map((file) => {
+      const lineStats = getFileLineStats(file);
 
-        return {
-          binary: section.binary,
-          kind: section.kind,
-          loadState: section.loadState,
-          patchExcerpt,
-          summary: section.summary?.reason,
-        };
-      }),
-      status: file.status,
-    })),
+      return {
+        additions: lineStats.additions,
+        deletions: lineStats.deletions,
+        oldPath: file.oldPath,
+        path: file.path,
+        sections: file.sections.map((section) => {
+          const patchExcerpt = buildPatchExcerpt(section, remainingPatchBudget);
+          remainingPatchBudget = Math.max(0, remainingPatchBudget - patchExcerpt.length);
+
+          return {
+            binary: section.binary,
+            kind: section.kind,
+            loadState: section.loadState,
+            patchExcerpt,
+            summary: section.summary?.reason,
+          };
+        }),
+        status: file.status,
+      };
+    }),
     generatedAt: state.generatedAt,
     root: state.root,
     source: state.source,
@@ -111,34 +156,42 @@ const buildPromptInput = (state) => {
 };
 
 /** @param {RepositoryState} state */
-const buildPrompt = (state) => `You are helping Codiff order a code review.
+const buildPrompt = (
+  state,
+) => `You are helping Codiff organize a diff into conceptual change sections.
 
-Return a high-leverage review walkthrough order, not review findings.
+Return an AI-sorted navigation view of the change, not review findings.
 Do not inspect the repository or run shell commands; use only the digest below.
-Your job is to help a human reviewer spend attention where architectural judgment matters and avoid blocking work on low-value changes.
+Your job is to group related files into named concepts and order those concepts from biggest or most important change to smallest or least important.
 Use every provided path exactly once.
-Order files from highest review leverage to lowest.
-High leverage: architecture boundaries, public APIs, exported types, schemas, IPC, routing, persistence, auth/security, shared state, cross-cutting utilities, build/runtime behavior, files likely to affect multiple call sites, and tests that define important behavior or show how a new API is meant to be used.
-Medium leverage: feature implementation, contained behavior changes, local tests that clarify intent, and relevant config.
-Low leverage: leaf UI details, isolated tests/fixtures, docs, generated files, snapshots, lockfiles, formatting-only or mechanical churn.
-Rank by reviewability, not file type. A test may come before implementation when it is the clearest behavioral contract, usage example, or entry point for understanding the change. Do not always put tests first or last.
-Group files by review strategy, not by directory.
-Use group titles that tell the reviewer how to spend attention, such as "Review carefully", "Trace the data flow", "Verify behavior with tests", "Scan contained changes", or "Low value / skim".
-Avoid generic group titles like "Frontend files", "Tests", "Miscellaneous", or "Other changed files".
+
+Grouping rules:
+- Group by related change, not directory or file type.
+- One section = one inferred concept; a section may span multiple files (implementation + tests + plugin wiring + config).
+- Prefer grouping tests with the code they exercise when clearly related in the same concept section.
+- Within a multi-file section, list implementation files before test files.
+
+Section ordering (importance-first):
+- Order sections from biggest or most important change to smallest or least important.
+- Rank by conceptual weight and diff magnitude: new features, core logic, API or schema changes, and cross-cutting behavior come first; docs, config tweaks, generated files, and mechanical churn come last.
+- Tests usually last: test files, fixtures, and snapshots typically belong in later sections, either at the end of a concept section or in dedicated test sections near the bottom.
+- Do not promote test-only sections ahead of the implementation changes they validate unless the test change is itself the primary purpose of the PR.
+- Use additions and deletions in the digest as a signal for relative size and importance alongside semantic role.
+
+For each section:
+- title: short concept name a human would use in a PR summary, such as "New PolicyAdmin service layer" or "Discord $policy command". Avoid generic labels like "Frontend files", "Tests", "Miscellaneous", or "Other changed files".
+- reason: one sentence synthesizing what changed in that conceptual chunk.
+
 For each file:
-- reason: why this file is in this position, max 140 characters.
-- context: what the reviewer should pay attention to, max 180 characters.
-- action: "review", "scan", or "skim".
-- impact: "wide", "contained", or "mechanical".
-Set impact to "wide" only when the file appears to affect multiple features, contracts, boundaries, shared behavior, review order, or a test that explains a shared contract. Use it sparingly; if uncertain, choose "contained".
-Set impact to "contained" when the change appears limited to one feature, leaf component, local behavior, or focused test.
-Set impact to "mechanical" when the reviewer likely should skim unless they own that area.
-Do not mark every file "wide"; a useful walkthrough separates broad blast-radius files from contained or mechanical files.
-The summary must be exactly two short sentences split into focus and skim: focus says where review matters most, skim says what can be skimmed.
+- context: this file's role in the concept, max 180 characters.
+- reason: concise note on what changed in this file, max 140 characters.
+- action: always "scan".
+- impact: always "contained".
+
+The summary must be exactly two short sentences split into focus and skim: focus is the main themes of the overall change; skim is secondary or minor areas touched.
 Do not invent bugs.
 Do not produce review comments.
 Do not say "looks good".
-Do not nitpick syntax, naming, style, formatting, or local cleanup unless it affects review leverage.
 Do not mention files that were not provided.
 Return JSON only.
 
@@ -166,18 +219,18 @@ const normalizeWalkthrough = (input, files) => {
       seen.add(path);
       nextFiles.push({
         action: normalizeEnum(file?.action, actions, 'scan'),
-        context: cleanText(file?.context, 'Check the review-relevant context for this file.'),
+        context: cleanText(file?.context, 'Part of this conceptual change.'),
         impact: normalizeEnum(file?.impact, impacts, 'contained'),
         path,
-        reason: cleanText(file?.reason, 'Review this file in this part of the change.'),
+        reason: cleanText(file?.reason, 'Changed in this part of the diff.'),
       });
     }
 
     if (nextFiles.length > 0) {
       groups.push({
         files: nextFiles,
-        reason: cleanText(group?.reason, 'These files are related.'),
-        title: cleanText(group?.title, 'Walkthrough'),
+        reason: cleanText(group?.reason, 'These files implement the same conceptual change.'),
+        title: cleanText(group?.title, 'Change section'),
       });
     }
   }
@@ -186,39 +239,36 @@ const normalizeWalkthrough = (input, files) => {
     .filter((file) => !seen.has(file.path))
     .map((file) => ({
       action: 'scan',
-      context: 'Codex did not place this file; scan it after the ranked walkthrough.',
+      context: 'Not grouped by the walkthrough.',
       impact: 'contained',
       path: file.path,
-      reason: 'Review after the primary walkthrough; Codex did not place this file.',
+      reason: 'Included in the diff but not assigned to a concept section.',
     }));
 
   if (missingFiles.length > 0) {
     groups.push({
       files: missingFiles,
-      reason: 'Files not included in the Codex walkthrough response.',
-      title: 'Other changed files',
+      reason: 'Files not included in the walkthrough response.',
+      title: 'Other changes',
     });
   }
 
   if (groups.length === 0 && files.length > 0) {
-    throw new Error('Codex did not return any changed files.');
+    throw new Error('Walkthrough did not return any changed files.');
   }
 
   return {
     groups,
     summary: {
-      focus: cleanText(input?.summary?.focus, 'Review the highest-leverage files first.'),
-      skim: cleanText(
-        input?.summary?.skim,
-        'Skim low-value or mechanical files after core review.',
-      ),
+      focus: cleanText(input?.summary?.focus, 'Main themes of this change.'),
+      skim: cleanText(input?.summary?.skim, 'Secondary or minor areas touched.'),
     },
     version: 1,
   };
 };
 
-/** @param {RepositoryState} state @param {CodexOptions} codexOptions */
-const readWalkthrough = async (state, codexOptions) => {
+/** @param {RepositoryState} state @param {CursorAgentOptions} agentOptions */
+const readWalkthrough = async (state, agentOptions) => {
   if (state.files.length === 0) {
     return {
       status: 'ready',
@@ -234,31 +284,55 @@ const readWalkthrough = async (state, codexOptions) => {
   }
 
   try {
-    const response = await runCodex(
-      state.root,
-      buildPrompt(state),
-      walkthroughSchema,
-      'walkthrough.json',
-      'Codex walkthrough timed out.',
-      codexOptions,
+    const prompt = buildPrompt(state);
+    const timeoutSeconds = Math.round(WALKTHROUGH_TIMEOUT_MS / 1000);
+    const startedAt = Date.now();
+    console.error(
+      `[codiff:walkthrough] start files=${state.files.length} promptChars=${prompt.length} timeout=${timeoutSeconds}s model=${typeof agentOptions.model === 'object' ? agentOptions.model?.id : (agentOptions.model ?? 'default')}`,
     );
+
+    const response = await runCursorAgent({
+      model: agentOptions.model,
+      prompt,
+      repoRoot: state.root,
+      schema: walkthroughSchema,
+      timeoutMs: WALKTHROUGH_TIMEOUT_MS,
+      useSandbox: false,
+    });
     const parsed = parseJSONMessage(response);
+
+    console.error(
+      `[codiff:walkthrough] ready elapsedMs=${Date.now() - startedAt} responseChars=${response.length}`,
+    );
 
     return {
       status: 'ready',
       walkthrough: normalizeWalkthrough(parsed, state.files),
     };
   } catch (error) {
-    if (isCodexNotFoundError(error)) {
+    if (isCursorUnavailableError(error)) {
+      console.error(
+        `[codiff:walkthrough] unavailable code=${CURSOR_UNAVAILABLE_CODE} reason=${error instanceof Error ? error.message : String(error)}`,
+      );
       return {
-        code: CODEX_NOT_FOUND_CODE,
+        code: CURSOR_UNAVAILABLE_CODE,
         reason: error instanceof Error ? error.message : String(error),
         status: 'unavailable',
       };
     }
 
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[codiff:walkthrough] failed reason=${message}`);
+    if (/timed out/i.test(message)) {
+      const timeoutSeconds = Math.round(WALKTHROUGH_TIMEOUT_MS / 1000);
+      return {
+        reason: `Cursor walkthrough timed out after ${timeoutSeconds}s with no response. Try a faster model, reduce changed files, or set CODIFF_DEBUG_CURSOR=1 and check the Electron terminal for timing logs.`,
+        status: 'unavailable',
+      };
+    }
+
     return {
-      reason: error instanceof Error ? error.message : String(error),
+      reason: message,
       status: 'unavailable',
     };
   }

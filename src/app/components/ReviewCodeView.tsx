@@ -27,7 +27,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
 } from 'react';
-import codexIconUrl from '../../assets/codex.svg';
+import cursorIconUrl from '../../assets/cursor.png';
 import { matchesShortcut } from '../../config/keymap.ts';
 import type { CodiffKeymap } from '../../config/types.ts';
 import type {
@@ -61,6 +61,7 @@ import {
 } from '../../lib/diff.ts';
 import { getItemVersion } from '../../lib/item-version.ts';
 import { renderMarkdown } from '../../lib/markdown.tsx';
+import { getModelById } from '../../lib/models.ts';
 import {
   getCommentKey,
   getReviewCommentLineLabel,
@@ -72,13 +73,18 @@ import {
 import { applySearchHighlights } from '../../lib/search-highlights.ts';
 import type {
   ChangedFile,
+  CodiffModel,
   DiffImageContentResult,
   DiffSection,
   GitIdentity,
+  ModelParameterValue,
+  ModelSelection,
   PullRequestExistingReviewComment,
   ReviewSource,
 } from '../../types.ts';
 import { Gravatar } from './Gravatar.tsx';
+import { ModelConfigControls } from './ModelConfigControls.tsx';
+import { ModelSelect } from './ModelSelect.tsx';
 import { DiffLineCountBadge } from './Sidebar.tsx';
 
 function CopyFilePathButton({ path }: { path: string }) {
@@ -254,14 +260,16 @@ function ReviewAvatar({
   return <Gravatar fallback={label} size="medium" url={avatarUrl} />;
 }
 
-function CodexAvatar() {
+function CursorAvatar() {
   return (
-    <img alt="" className="review-comment-avatar-codex" draggable={false} src={codexIconUrl} />
+    <img alt="" className="review-comment-avatar-cursor" draggable={false} src={cursorIconUrl} />
   );
 }
 
-const canAskCodexForComment = (comment: ReviewComment) =>
-  !comment.isReadOnly && comment.body.trim().length > 0 && comment.codexReply?.status !== 'loading';
+const canAskCursorForComment = (comment: ReviewComment) =>
+  !comment.isReadOnly &&
+  comment.body.trim().length > 0 &&
+  comment.cursorReply?.status !== 'loading';
 
 const canSubmitCommentToGitHub = (comment: ReviewComment) =>
   !comment.isReadOnly &&
@@ -570,13 +578,17 @@ function ImageDiffPreview({
 
 function ReviewAnnotation({
   annotation,
+  askModelSelection,
+  availableModels,
   comments,
   focusCommentId,
   focusCommentRequest,
   identity,
   isPullRequest,
   keymap,
-  onAskCodex,
+  onAskCursor,
+  onAskModelChange,
+  onAskModelParamsChange,
   onCommentBlur,
   onCommentFocus,
   onDeleteComment,
@@ -584,13 +596,17 @@ function ReviewAnnotation({
   onUpdateComment,
 }: {
   annotation: DiffLineAnnotation<ReviewCommentAnnotationMetadata>;
+  askModelSelection: ModelSelection;
+  availableModels: ReadonlyArray<CodiffModel>;
   comments: ReadonlyArray<ReviewComment>;
   focusCommentId: string | null;
   focusCommentRequest: number;
   identity: GitIdentity | null;
   isPullRequest: boolean;
   keymap: CodiffKeymap;
-  onAskCodex: (commentId: string) => void;
+  onAskCursor: (commentId: string) => void;
+  onAskModelChange: (model: string) => void;
+  onAskModelParamsChange: (params: Array<ModelParameterValue>) => void;
   onCommentBlur: (comment: ReviewComment, body: string) => void;
   onCommentFocus: (comment: ReviewComment) => void;
   onDeleteComment: (commentId: string) => void;
@@ -620,10 +636,10 @@ function ReviewAnnotation({
           return;
         }
 
-        if (!isPullRequest && canAskCodexForComment(comment)) {
+        if (!isPullRequest && canAskCursorForComment(comment)) {
           event.preventDefault();
           event.stopPropagation();
-          onAskCodex(comment.id);
+          onAskCursor(comment.id);
         }
         return;
       }
@@ -643,8 +659,10 @@ function ReviewAnnotation({
         onDeleteComment(comment.id);
       }
     },
-    [isPullRequest, keymap, onAskCodex, onDeleteComment, onSubmitComment],
+    [isPullRequest, keymap, onAskCursor, onDeleteComment, onSubmitComment],
   );
+
+  const selectedAskModel = getModelById(availableModels, askModelSelection.id);
 
   if (annotationComments.length === 0) {
     return null;
@@ -653,7 +671,7 @@ function ReviewAnnotation({
   return (
     <div className="review-comment-thread">
       {annotationComments.map((comment) => {
-        const canAskCodex = canAskCodexForComment(comment);
+        const canAskCursor = canAskCursorForComment(comment);
         const canSubmitComment = canSubmitCommentToGitHub(comment);
         const displayName =
           comment.author?.login || identity?.name || identity?.email || 'Git user';
@@ -663,54 +681,68 @@ function ReviewAnnotation({
             <div className="review-comment">
               <ReviewAvatar author={comment.author} identity={identity} />
               <div className="review-comment-body">
-                <div
-                  className={`review-comment-header${
-                    isPullRequest && !comment.isReadOnly ? ' with-comment-action' : ''
-                  }${comment.isReadOnly ? ' read-only' : ''}`}
-                >
+                <div className={`review-comment-header${comment.isReadOnly ? ' read-only' : ''}`}>
                   <strong>{displayName}</strong>
                   <span>{getReviewCommentLineLabel(comment)}</span>
                   {!comment.isReadOnly ? (
-                    <button
-                      className="review-comment-action"
-                      disabled={!canAskCodex}
-                      onClick={() => onAskCodex(comment.id)}
-                      title={canAskCodex ? 'Ask Codex' : 'Write a note before asking Codex'}
-                      type="button"
-                    >
-                      Ask
-                    </button>
-                  ) : null}
-                  {isPullRequest && !comment.isReadOnly ? (
-                    <button
-                      className="review-comment-action"
-                      disabled={!canSubmitComment}
-                      onClick={() => onSubmitComment(comment.id)}
-                      title={
-                        canSubmitComment
-                          ? 'Submit comment to GitHub'
-                          : 'Write a note before commenting'
-                      }
-                      type="button"
-                    >
-                      {comment.githubSubmit?.status === 'submitting' ? 'Sending' : 'Comment'}
-                    </button>
-                  ) : null}
-                  {!comment.isReadOnly ? (
-                    <button
-                      aria-label="Delete comment"
-                      className="review-comment-delete"
-                      onClick={() => onDeleteComment(comment.id)}
-                      title="Delete comment"
-                      type="button"
-                    >
-                      <X
-                        aria-hidden
-                        className="review-comment-delete-icon"
-                        size={14}
-                        weight="bold"
+                    <div className="review-comment-header-actions">
+                      <ModelSelect
+                        compact
+                        disabled={!canAskCursor}
+                        models={
+                          availableModels.length > 0
+                            ? availableModels
+                            : [{ id: askModelSelection.id, label: askModelSelection.id }]
+                        }
+                        onChange={onAskModelChange}
+                        value={askModelSelection.id}
                       />
-                    </button>
+                      <ModelConfigControls
+                        compact
+                        disabled={!canAskCursor}
+                        model={selectedAskModel}
+                        onParamsChange={onAskModelParamsChange}
+                        params={askModelSelection.params ?? []}
+                      />
+                      <button
+                        className="review-comment-action"
+                        disabled={!canAskCursor}
+                        onClick={() => onAskCursor(comment.id)}
+                        title={canAskCursor ? 'Ask' : 'Write a note before asking'}
+                        type="button"
+                      >
+                        Ask
+                      </button>
+                      {isPullRequest ? (
+                        <button
+                          className="review-comment-action"
+                          disabled={!canSubmitComment}
+                          onClick={() => onSubmitComment(comment.id)}
+                          title={
+                            canSubmitComment
+                              ? 'Submit comment to GitHub'
+                              : 'Write a note before commenting'
+                          }
+                          type="button"
+                        >
+                          {comment.githubSubmit?.status === 'submitting' ? 'Sending' : 'Comment'}
+                        </button>
+                      ) : null}
+                      <button
+                        aria-label="Delete comment"
+                        className="review-comment-delete"
+                        onClick={() => onDeleteComment(comment.id)}
+                        title="Delete comment"
+                        type="button"
+                      >
+                        <X
+                          aria-hidden
+                          className="review-comment-delete-icon"
+                          size={14}
+                          weight="bold"
+                        />
+                      </button>
+                    </div>
                   ) : null}
                 </div>
                 <textarea
@@ -732,22 +764,22 @@ function ReviewAnnotation({
                 ) : null}
               </div>
             </div>
-            {comment.codexReply ? (
-              <div className="review-comment codex">
-                <CodexAvatar />
-                <div className="review-comment-body codex">
-                  <div className="review-comment-header codex">
-                    <strong>Codex</strong>
+            {comment.cursorReply ? (
+              <div className="review-comment cursor-assistant">
+                <CursorAvatar />
+                <div className="review-comment-body cursor-assistant">
+                  <div className="review-comment-header cursor-assistant">
+                    <strong>Cursor</strong>
                   </div>
                   <div
-                    className={`review-comment-codex-reply${
-                      comment.codexReply.status === 'loading' ? ' is-loading' : ''
-                    }${comment.codexReply.status === 'error' ? ' error' : ''}`}
+                    className={`review-comment-assistant-reply${
+                      comment.cursorReply.status === 'loading' ? ' is-loading' : ''
+                    }${comment.cursorReply.status === 'error' ? ' error' : ''}`}
                   >
-                    {comment.codexReply.status === 'loading' ? (
-                      <span className="review-comment-codex-loading">Waiting for Codex…</span>
+                    {comment.cursorReply.status === 'loading' ? (
+                      <span className="review-comment-assistant-loading">Waiting for Cursor…</span>
                     ) : (
-                      renderMarkdown(comment.codexReply.body ?? comment.codexReply.error ?? '')
+                      renderMarkdown(comment.cursorReply.body ?? comment.cursorReply.error ?? '')
                     )}
                   </div>
                 </div>
@@ -762,6 +794,8 @@ function ReviewAnnotation({
 
 export function ReviewCodeView({
   activeSearchMatch,
+  askModelSelection,
+  availableModels,
   collapsed,
   comments,
   files,
@@ -772,7 +806,9 @@ export function ReviewCodeView({
   isPullRequest,
   itemVersionByPath,
   keymap,
-  onAskCodex,
+  onAskCursor,
+  onAskModelChange,
+  onAskModelParamsChange,
   onCreateComment,
   onDeleteComment,
   onOpenFile,
@@ -790,6 +826,8 @@ export function ReviewCodeView({
   walkthroughNotes,
 }: {
   activeSearchMatch: DiffSearchMatch | null;
+  askModelSelection: ModelSelection;
+  availableModels: ReadonlyArray<CodiffModel>;
   collapsed: ReadonlySet<string>;
   comments: ReadonlyArray<ReviewComment>;
   files: ReadonlyArray<ChangedFile>;
@@ -800,7 +838,9 @@ export function ReviewCodeView({
   isPullRequest: boolean;
   itemVersionByPath: Readonly<Record<string, number>>;
   keymap: CodiffKeymap;
-  onAskCodex: (commentId: string) => void;
+  onAskCursor: (commentId: string) => void;
+  onAskModelChange: (model: string) => void;
+  onAskModelParamsChange: (params: Array<ModelParameterValue>) => void;
   onCreateComment: (comment: Omit<ReviewComment, 'body' | 'id'>) => void;
   onDeleteComment: (commentId: string) => void;
   onOpenFile: (file: ChangedFile) => void;
@@ -1430,13 +1470,17 @@ export function ReviewCodeView({
       return item.type === 'diff' ? (
         <ReviewAnnotation
           annotation={annotation as DiffLineAnnotation<ReviewCommentAnnotationMetadata>}
+          askModelSelection={askModelSelection}
+          availableModels={availableModels}
           comments={comments}
           focusCommentId={focusCommentId}
           focusCommentRequest={focusCommentRequest}
           identity={gitIdentity}
           isPullRequest={isPullRequest}
           keymap={keymap}
-          onAskCodex={onAskCodex}
+          onAskCursor={onAskCursor}
+          onAskModelChange={onAskModelChange}
+          onAskModelParamsChange={onAskModelParamsChange}
           onCommentBlur={blurComment}
           onCommentFocus={focusComment}
           onDeleteComment={deleteComment}
@@ -1446,6 +1490,8 @@ export function ReviewCodeView({
       ) : null;
     },
     [
+      askModelSelection,
+      availableModels,
       comments,
       blurComment,
       deleteComment,
@@ -1458,7 +1504,9 @@ export function ReviewCodeView({
       keymap,
       markMarkdownPreviewLayoutReady,
       markImagePreviewLayoutReady,
-      onAskCodex,
+      onAskCursor,
+      onAskModelChange,
+      onAskModelParamsChange,
       onSubmitComment,
       onUpdateComment,
       source,

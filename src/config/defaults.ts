@@ -1,11 +1,12 @@
 import type { CodiffConfig, CodiffKeymap, CodiffSettings } from './types.ts';
 
 export const defaultSettings: CodiffSettings = {
+  askModel: 'composer-2.5',
   copyCommentsOnClose: false,
   lastRepositoryPath: '',
-  openAIModel: 'gpt-5.3-codex-spark',
   showWhitespace: false,
   theme: 'system',
+  walkthroughModel: 'composer-2.5',
 };
 
 export const defaultKeymap: CodiffKeymap = {

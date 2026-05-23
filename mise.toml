@@ -1,0 +1,52 @@
+# Codiff dev environment — https://mise.jdx.dev
+#
+# vp is NOT a separate paid tool. It is the CLI from the vite-plus npm package
+# (@voidzero-dev/vite-plus), installed locally via pnpm. After `mise install` and
+# `pnpm install`, use: pnpm exec vp …  or  pnpm run <script>
+
+[tools]
+node = "23"
+pnpm = "11.0.6"
+
+[env]
+# Load CURSOR_API_KEY and other secrets from repo-root .env (gitignored)
+_.file = ".env"
+# Makes vp, vitest, electron, etc. available after pnpm install
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+[tasks.install]
+description = "Install Node dependencies"
+run = "pnpm install"
+
+[tasks.config]
+description = "Sync vite-plus / editor config (runs on pnpm prepare)"
+run = "pnpm exec vp config"
+
+[tasks.dev]
+description = "Vite dev server with HMR (terminal 1)"
+run = "pnpm dev"
+
+[tasks.electron]
+description = "Electron app pointed at dev server (terminal 2)"
+env.ELECTRON_RENDERER_URL = "http://127.0.0.1:5173"
+run = "pnpm electron"
+
+[tasks.codiff]
+description = "Launch Codiff (optional repo path: mise run codiff -- /path/to/repo)"
+run = "pnpm codiff"
+
+[tasks.build]
+description = "Build renderer to dist/"
+run = "pnpm exec vp build"
+
+[tasks.check]
+description = "Lint, format, typecheck"
+run = "pnpm exec vp check --fix"
+
+[tasks.test]
+description = "Run unit tests"
+run = "pnpm test"
+
+[tasks.verify]
+description = "check + test + build"
+depends = ["check", "test", "build"]

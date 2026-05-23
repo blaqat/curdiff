@@ -21,12 +21,23 @@ import {
 import { fileTreeSort, statusForTree } from '../../lib/files.ts';
 import { isNativeInputTarget } from '../../lib/keyboard.ts';
 import { renderInlineMarkdown } from '../../lib/markdown.tsx';
+import { getModelById } from '../../lib/models.ts';
 import { getShortRef, getSourceKey } from '../../lib/source.ts';
-import { walkthroughActionLabel, walkthroughImpactLabel } from '../../lib/walkthrough.ts';
-import type { ChangedFile, HistoryEntry, ReviewSource, Walkthrough } from '../../types.ts';
+import type {
+  ChangedFile,
+  CodiffModel,
+  HistoryEntry,
+  ModelParameterValue,
+  ModelSelection,
+  ReviewSource,
+  Walkthrough,
+} from '../../types.ts';
 import { Gravatar } from './Gravatar.tsx';
+import { ModelConfigControls } from './ModelConfigControls.tsx';
+import { ModelSelect } from './ModelSelect.tsx';
 
 export function Sidebar({
+  availableModels,
   currentSource,
   files,
   historyEntries,
@@ -40,6 +51,9 @@ export function Sidebar({
   onSearchQueryChange,
   onSelectPath,
   onSelectSource,
+  onStartWalkthrough,
+  onWalkthroughModelChange,
+  onWalkthroughModelParamsChange,
   pullRequestSource,
   searchQuery,
   selectedPath,
@@ -47,10 +61,13 @@ export function Sidebar({
   walkthroughAvailable,
   walkthroughError,
   walkthroughLoading,
+  walkthroughModelSelection,
   walkthroughNotes,
+  walkthroughStartDisabled,
   walkthroughSummary,
   walkthroughUnread,
 }: {
+  availableModels: ReadonlyArray<CodiffModel>;
   currentSource: ReviewSource;
   files: ReadonlyArray<ChangedFile>;
   historyEntries: ReadonlyArray<HistoryEntry>;
@@ -64,6 +81,9 @@ export function Sidebar({
   onSearchQueryChange: (query: string) => void;
   onSelectPath: (path: string) => void;
   onSelectSource: (source: ReviewSource) => void;
+  onStartWalkthrough: () => void;
+  onWalkthroughModelChange: (model: string) => void;
+  onWalkthroughModelParamsChange: (params: Array<ModelParameterValue>) => void;
   pullRequestSource: PullRequestSource | null;
   searchQuery: string;
   selectedPath: string | null;
@@ -71,10 +91,14 @@ export function Sidebar({
   walkthroughAvailable: boolean;
   walkthroughError: WalkthroughError | null;
   walkthroughLoading: boolean;
+  walkthroughModelSelection: ModelSelection;
   walkthroughNotes: ReadonlyMap<string, WalkthroughNote>;
+  walkthroughStartDisabled?: boolean;
   walkthroughSummary: Walkthrough['summary'] | null;
   walkthroughUnread: boolean;
 }) {
+  const selectedWalkthroughModel = getModelById(availableModels, walkthroughModelSelection.id);
+
   const allowSelectionScroll = useRef(false);
   const allowSelectionScrollTimer = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -313,14 +337,50 @@ export function Sidebar({
         <>
           {walkthroughLoading ? (
             <div className="sidebar-walkthrough-status-shell">
-              <div className="sidebar-walkthrough-status codex">
-                <strong>Waiting on Codex…</strong>
+              <div className="sidebar-walkthrough-status cursor-assistant">
+                <strong>Waiting on Cursor…</strong>
               </div>
             </div>
           ) : walkthroughError ? (
             <div className="sidebar-walkthrough-status" title={walkthroughError.reason}>
               <strong>Walkthrough unavailable</strong>
               <span>{walkthroughError.reason}</span>
+            </div>
+          ) : null}
+          {!walkthroughLoading && !walkthroughAvailable ? (
+            <div className="sidebar-walkthrough-start">
+              <label className="sidebar-walkthrough-start-field">
+                <span>Model</span>
+                <ModelSelect
+                  disabled={walkthroughStartDisabled}
+                  models={
+                    availableModels.length > 0
+                      ? availableModels
+                      : [
+                          {
+                            id: walkthroughModelSelection.id,
+                            label: walkthroughModelSelection.id,
+                          },
+                        ]
+                  }
+                  onChange={onWalkthroughModelChange}
+                  value={walkthroughModelSelection.id}
+                />
+              </label>
+              <ModelConfigControls
+                disabled={walkthroughStartDisabled}
+                model={selectedWalkthroughModel}
+                onParamsChange={onWalkthroughModelParamsChange}
+                params={walkthroughModelSelection.params ?? []}
+              />
+              <button
+                className="sidebar-walkthrough-start-button"
+                disabled={walkthroughStartDisabled}
+                onClick={onStartWalkthrough}
+                type="button"
+              >
+                Start walkthrough
+              </button>
             </div>
           ) : null}
           {!walkthroughLoading ? (
@@ -550,8 +610,8 @@ function WalkthroughSidebar({
 
     for (const file of files) {
       const note = walkthroughNotes.get(file.path);
-      const title = note?.groupTitle ?? 'Other changed files';
-      const reason = note?.groupReason ?? 'Review after the primary walkthrough.';
+      const title = note?.groupTitle ?? 'Other changes';
+      const reason = note?.groupReason ?? 'Not grouped by the walkthrough.';
       const key = `${title}:${reason}`;
       let group = groupsByTitle.get(key);
 
@@ -587,20 +647,27 @@ function WalkthroughSidebar({
     <div className="walkthrough-list">
       {walkthroughSummary ? (
         <div className="walkthrough-summary">
-          <strong>Review Focus</strong>
+          <strong>Overview</strong>
           <span>{renderInlineMarkdown(walkthroughSummary.focus)}</span>
           <span>{renderInlineMarkdown(walkthroughSummary.skim)}</span>
         </div>
       ) : null}
-      {groups.map((group) => {
+      {groups.map((group, groupIndex) => {
         const collapsed = collapsedGroupKeys.has(group.key);
+        const groupLineCount = getTotalDiffLineCount(
+          group.files.map(({ file }) => getDiffLineCount(file, showWhitespace)),
+        );
+        const groupStatsLabel = group.files.length === 1 ? '1 file' : `${group.files.length} files`;
+        const groupStatsSuffix = groupLineCount.countable
+          ? ` ${formatTreeLineCount(groupLineCount)}`
+          : '';
         return (
           <section className={`walkthrough-group${collapsed ? ' collapsed' : ''}`} key={group.key}>
             <button
               aria-expanded={!collapsed}
               className="walkthrough-group-header"
               onClick={() => toggleGroupCollapsed(group.key)}
-              title={`${group.title}. ${group.reason}`}
+              title={`${groupIndex + 1}. ${group.title}. ${group.reason}`}
               type="button"
             >
               <span className="walkthrough-group-title-row">
@@ -612,9 +679,15 @@ function WalkthroughSidebar({
                     weight="bold"
                   />
                 </span>
-                <span className="walkthrough-group-title">{group.title}</span>
+                <span className="walkthrough-group-title">
+                  {groupIndex + 1}. {group.title}
+                </span>
                 <span className="walkthrough-group-count">{group.files.length}</span>
               </span>
+              <small className="walkthrough-group-stats">
+                {groupStatsLabel}
+                {groupStatsSuffix}
+              </small>
               <small>{renderInlineMarkdown(group.reason)}</small>
             </button>
             {collapsed
@@ -636,15 +709,9 @@ function WalkthroughSidebar({
                           lineCount={lineCount}
                         />
                       </span>
-                      {note ? (
-                        <span className="walkthrough-file-meta">
-                          {walkthroughImpactLabel[note.impact]} ·{' '}
-                          {walkthroughActionLabel[note.action]}
-                        </span>
-                      ) : null}
                       <span className="walkthrough-file-reason">
                         {renderInlineMarkdown(
-                          note?.context ?? note?.reason ?? 'Review this changed file.',
+                          note?.context ?? note?.reason ?? 'Changed in this part of the diff.',
                         )}
                       </span>
                     </button>

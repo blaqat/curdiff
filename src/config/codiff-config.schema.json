@@ -24,10 +24,41 @@
           "default": "",
           "description": "The last repository opened by Codiff when no path was explicitly provided."
         },
-        "openAIModel": {
+        "askModel": {
           "type": "string",
-          "default": "gpt-5.3-codex-spark",
-          "description": "The OpenAI model to use for review assistance and walkthroughs."
+          "default": "composer-2.5",
+          "description": "The Cursor model to use for inline review Ask."
+        },
+        "walkthroughModel": {
+          "type": "string",
+          "default": "composer-2.5",
+          "description": "The Cursor model to use for walkthroughs."
+        },
+        "askModelParams": {
+          "type": "array",
+          "description": "Per-model parameter values for inline review Ask.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "required": ["id", "value"]
+          }
+        },
+        "walkthroughModelParams": {
+          "type": "array",
+          "description": "Per-model parameter values for walkthroughs.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "value": { "type": "string" }
+            },
+            "required": ["id", "value"]
+          }
         },
         "showWhitespace": {
           "type": "boolean",
@@ -80,7 +111,7 @@
         "submitComment": {
           "type": "string",
           "default": "Mod+Enter",
-          "description": "Submit a review comment to GitHub or ask Codex."
+          "description": "Submit a review comment to GitHub or ask the review assistant."
         },
         "discardComment": {
           "type": "string",
