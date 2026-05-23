@@ -13,6 +13,7 @@ import {
 import { matchesShortcut } from '../../config/keymap.ts';
 import type { CodiffKeymap } from '../../config/types.ts';
 import type { RepositoryLoadError, ReviewComment } from '../../lib/app-types.ts';
+import { appName, cliCommand } from '../../lib/branding.ts';
 import { getReloadShortcutLabel } from '../../lib/keyboard.ts';
 import { buildReviewCommentsMarkdown } from '../../lib/review-comments.ts';
 import type { ChangedFile, PullRequestReviewEvent } from '../../types.ts';
@@ -73,7 +74,8 @@ export function FirstRunPanel({
       <strong>Open a Git repository</strong>
       <p>
         Install the terminal helper, then run{' '}
-        <code className="walkthrough-inline-code">codiff</code> from a Git repository in Terminal.
+        <code className="walkthrough-inline-code">{cliCommand}</code> from a Git repository in
+        Terminal.
       </p>
       <p>
         You can also choose <span className="empty-panel-menu-path">File → Open Folder…</span> to
@@ -94,9 +96,9 @@ export function RepositoryLoadErrorPanel({ error }: { error: RepositoryLoadError
       <>
         <strong>No Git repository found</strong>
         <p>
-          Codiff was opened outside a Git repository. Run{' '}
-          <code className="walkthrough-inline-code">codiff</code> from inside a repo, or choose{' '}
-          <span className="empty-panel-menu-path">File → Open Folder…</span> to open one.
+          {appName} was opened outside a Git repository. Run{' '}
+          <code className="walkthrough-inline-code">{cliCommand}</code> from inside a repo, or
+          choose <span className="empty-panel-menu-path">File → Open Folder…</span> to open one.
         </p>
       </>
     );
@@ -117,7 +119,7 @@ export function CursorUnavailablePanel({ onShowFiles }: { onShowFiles: () => voi
       <p>
         Set <code className="walkthrough-inline-code">CURSOR_API_KEY</code> from{' '}
         <a href="https://cursor.com/dashboard/integrations">Cursor Dashboard → Integrations</a>,
-        then restart Codiff.
+        then restart {appName}.
       </p>
       <p>When launching from Terminal, export the key in your shell profile or pass it inline:</p>
       <p>

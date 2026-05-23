@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { cliCommand } from './branding.js';
 
 export const flagDefinitions = [
   { argument: '<ref>', description: 'Review a specific commit.', name: 'commit', type: 'string' },
@@ -21,13 +22,16 @@ export const flagDefinitions = [
 ];
 
 export const usageExamples = [
-  { command: 'codiff', description: 'Review staged and unstaged changes.' },
-  { command: 'codiff /path/to/repo', description: 'Review changes in a specific repository.' },
-  { command: 'codiff a1b2c3d', description: 'Review a specific commit.' },
-  { command: "codiff '#75'", description: 'Review pull request #75.' },
-  { command: 'codiff pr 75', description: 'Review pull request #75 (alternate syntax).' },
-  { command: 'codiff -w', description: 'Start with an LLM walkthrough.' },
-  { command: 'codiff -w a1b2c3d', description: 'Walkthrough a specific commit.' },
+  { command: cliCommand, description: 'Review staged and unstaged changes.' },
+  {
+    command: `${cliCommand} /path/to/repo`,
+    description: 'Review changes in a specific repository.',
+  },
+  { command: `${cliCommand} a1b2c3d`, description: 'Review a specific commit.' },
+  { command: `${cliCommand} '#75'`, description: 'Review pull request #75.' },
+  { command: `${cliCommand} pr 75`, description: 'Review pull request #75 (alternate syntax).' },
+  { command: `${cliCommand} -w`, description: 'Start with an LLM walkthrough.' },
+  { command: `${cliCommand} -w a1b2c3d`, description: 'Walkthrough a specific commit.' },
 ];
 
 const parseArgsOptions = Object.fromEntries(
@@ -53,9 +57,9 @@ export const formatHelpText = (version) => {
   const examplePad = Math.max(...usageExamples.map(({ command }) => command.length)) + 2;
 
   const lines = [
-    `${blueBold(`codiff v${version}`)} ${gray('A fast local diff viewer.')}`,
+    `${blueBold(`${cliCommand} v${version}`)} ${gray('A fast local diff viewer.')}`,
     '',
-    `${blueBold('Usage:')} ${gray('codiff [options] [<ref> | <pr> | <url>] [path]')}`,
+    `${blueBold('Usage:')} ${gray(`${cliCommand} [options] [<ref> | <pr> | <url>] [path]`)}`,
     '',
     blueBold('Options:'),
     ...flagLines.map(
@@ -176,7 +180,7 @@ export const resolvePullRequestUrl = (repositoryPath, number) => {
     remotes = readGitHubRemotes(repositoryPath);
   } catch {
     throw new Error(
-      `Could not resolve PR #${number}. Run codiff from inside a GitHub repository or pass a full GitHub pull request URL.`,
+      `Could not resolve PR #${number}. Run ${cliCommand} from inside a GitHub repository or pass a full GitHub pull request URL.`,
     );
   }
 

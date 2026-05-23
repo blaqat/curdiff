@@ -11,6 +11,8 @@ const {
 const { homedir } = require('node:os');
 const { join } = require('node:path');
 
+const branding = require('../branding.json');
+
 /**
  * @typedef {import('../src/config/types.ts').CodiffConfig} CodiffConfig
  * @typedef {import('../src/config/types.ts').CodiffKeymap} CodiffKeymap
@@ -51,9 +53,9 @@ const defaultConfig = {
   settings: defaultSettings,
 };
 
-const getConfigDir = () => join(homedir(), '.codiff');
+const getConfigDir = () => join(homedir(), branding.configDirName);
 
-const getConfigPath = () => join(getConfigDir(), 'codiff.jsonc');
+const getConfigPath = () => join(getConfigDir(), branding.configFileName);
 
 /**
  * Strip JSONC comments (line comments and block comments) to produce valid JSON.
@@ -343,7 +345,7 @@ const watchConfig = (onChange) => {
 
   // Watch the directory so we detect file creation/deletion too
   const watcher = watch(configDir, (eventType, filename) => {
-    if (filename !== 'codiff.jsonc') {
+    if (filename !== branding.configFileName) {
       return;
     }
 

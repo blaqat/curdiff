@@ -12,19 +12,21 @@ const {
 } = require('node:fs');
 const { join } = require('node:path');
 
+const branding = require('../../branding.json');
+
 /**
  * @param {{app: import('electron').App; dialog: import('electron').Dialog; root: string}} options
  */
 const createTerminalHelper = ({ app, dialog, root }) => {
   const getTerminalHelperSourcePath = () =>
     app.isPackaged
-      ? join(process.resourcesPath, 'app/bin/codiff-app')
+      ? join(process.resourcesPath, 'app/bin', branding.cliScriptName)
       : join(root, 'bin/codiff.js');
 
   const getTerminalHelperTargetPaths = () => [
-    '/opt/homebrew/bin/codiff',
-    '/usr/local/bin/codiff',
-    join(app.getPath('home'), '.local/bin/codiff'),
+    join('/opt/homebrew/bin', branding.cliCommand),
+    join('/usr/local/bin', branding.cliCommand),
+    join(app.getPath('home'), '.local/bin', branding.cliCommand),
   ];
 
   const getPreferredTerminalHelperTargetPath = () => {
@@ -32,14 +34,14 @@ const createTerminalHelper = ({ app, dialog, root }) => {
       try {
         if (existsSync(directory)) {
           accessSync(directory, constants.W_OK);
-          return join(directory, 'codiff');
+          return join(directory, branding.cliCommand);
         }
       } catch {
         // Keep looking for a writable install location.
       }
     }
 
-    return join(app.getPath('home'), '.local/bin/codiff');
+    return join(app.getPath('home'), '.local/bin', branding.cliCommand);
   };
 
   /** @param {string} targetPath */
@@ -66,7 +68,7 @@ const createTerminalHelper = ({ app, dialog, root }) => {
     );
 
     return {
-      command: 'codiff',
+      command: branding.cliCommand,
       installed: installedPath != null,
       path: installedPath || getPreferredTerminalHelperTargetPath(),
     };
@@ -93,7 +95,7 @@ const createTerminalHelper = ({ app, dialog, root }) => {
   const installTerminalHelper = async (browserWindow) => {
     try {
       const sourcePath = getTerminalHelperSourcePath();
-      const targetPath = join(getWritableHelperDirectory(), 'codiff');
+      const targetPath = join(getWritableHelperDirectory(), branding.cliCommand);
 
       if (!existsSync(sourcePath)) {
         throw new Error(`Could not find terminal helper at ${sourcePath}.`);
@@ -114,7 +116,7 @@ const createTerminalHelper = ({ app, dialog, root }) => {
       /** @type {import('electron').MessageBoxOptions} */
       const successMessage = {
         buttons: ['OK'],
-        message: `Installed codiff at ${targetPath}.`,
+        message: `Installed ${branding.cliCommand} at ${targetPath}.`,
         type: 'info',
       };
       if (browserWindow) {

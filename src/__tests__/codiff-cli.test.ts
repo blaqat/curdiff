@@ -151,7 +151,7 @@ test('packaged terminal helper forwards --commit HEAD to Electron', async () => 
     );
     await chmod(openPath, 0o755);
 
-    await execFileAsync(resolve('bin/codiff-app'), ['--commit', 'HEAD', repositoryPath], {
+    await execFileAsync(resolve('bin/curdiff-app'), ['--commit', 'HEAD', repositoryPath], {
       env: {
         ...process.env,
         OPEN_ARGS_FILE: logPath,
@@ -186,7 +186,7 @@ test('packaged terminal helper forwards HEAD^1 to Electron as a commit', async (
     );
     await chmod(openPath, 0o755);
 
-    await execFileAsync(resolve('bin/codiff-app'), ['HEAD^1'], {
+    await execFileAsync(resolve('bin/curdiff-app'), ['HEAD^1'], {
       env: {
         ...process.env,
         OPEN_ARGS_FILE: logPath,
@@ -226,7 +226,7 @@ test('packaged terminal helper forwards relative repository paths as absolute pa
 
     const runHelper = async (args: ReadonlyArray<string>) => {
       await writeFile(logPath, '');
-      await execFileAsync(resolve('bin/codiff-app'), args, {
+      await execFileAsync(resolve('bin/curdiff-app'), args, {
         cwd: repositoryPath,
         env: {
           ...process.env,
@@ -279,7 +279,7 @@ test('parseArguments defaults help and version to false', () => {
 
 test('formatHelpText includes version and all flags', () => {
   const text = formatHelpText('1.2.3');
-  expect(text).toContain('codiff v1.2.3');
+  expect(text).toContain('curdiff v1.2.3');
   expect(text).toContain('Usage:');
   expect(text).toContain('--help');
   expect(text).toContain('--version');
@@ -299,39 +299,39 @@ test('formatHelpText styles titles and descriptions', () => {
   expect(text).toContain('  --help, -h');
   expect(text).not.toContain('\u001b[1;34m--help, -h\u001b[0m');
   expect(text).toContain('\u001b[90mShow this help message and exit.\u001b[0m');
-  expect(text).toContain('  codiff -w');
-  expect(text).not.toContain('\u001b[1;34mcodiff -w\u001b[0m');
+  expect(text).toContain('  curdiff -w');
+  expect(text).not.toContain('\u001b[1;34mcurdiff -w\u001b[0m');
   expect(text).toContain('\u001b[90mStart with an LLM walkthrough.\u001b[0m');
 });
 
-test('codiff-app --help prints help text and exits 0', async () => {
-  const { stdout } = await execFileAsync(resolve('bin/codiff-app'), ['--help'], {
+test('curdiff-app --help prints help text and exits 0', async () => {
+  const { stdout } = await execFileAsync(resolve('bin/curdiff-app'), ['--help'], {
     encoding: 'utf8',
   });
-  expect(stdout).toContain('codiff v');
+  expect(stdout).toContain('curdiff v');
   expect(stdout).toContain('Usage:');
   expect(stdout).toContain('--help');
   expect(stdout).toContain('\u001b[1;34mUsage:\u001b[0m');
   expect(stdout).toContain('\u001b[90mShow this help message and exit.\u001b[0m');
 });
 
-test('codiff-app -h prints help text and exits 0', async () => {
-  const { stdout } = await execFileAsync(resolve('bin/codiff-app'), ['-h'], {
+test('curdiff-app -h prints help text and exits 0', async () => {
+  const { stdout } = await execFileAsync(resolve('bin/curdiff-app'), ['-h'], {
     encoding: 'utf8',
   });
   expect(stdout).toContain('Usage:');
 });
 
-test('codiff-app --version prints version and exits 0', async () => {
-  const { stdout } = await execFileAsync(resolve('bin/codiff-app'), ['--version'], {
+test('curdiff-app --version prints version and exits 0', async () => {
+  const { stdout } = await execFileAsync(resolve('bin/curdiff-app'), ['--version'], {
     encoding: 'utf8',
   });
-  expect(stdout).toMatch(/^codiff v\d+\.\d+\.\d+\n$/);
+  expect(stdout).toMatch(/^curdiff v\d+\.\d+\.\d+\n$/);
 });
 
-test('codiff-app -v prints version and exits 0', async () => {
-  const { stdout } = await execFileAsync(resolve('bin/codiff-app'), ['-v'], {
+test('curdiff-app -v prints version and exits 0', async () => {
+  const { stdout } = await execFileAsync(resolve('bin/curdiff-app'), ['-v'], {
     encoding: 'utf8',
   });
-  expect(stdout).toMatch(/^codiff v\d+\.\d+\.\d+\n$/);
+  expect(stdout).toMatch(/^curdiff v\d+\.\d+\.\d+\n$/);
 });

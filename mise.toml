@@ -39,6 +39,22 @@ run = "pnpm codiff"
 description = "Build renderer to dist/"
 run = "pnpm exec vp build"
 
+[tasks.install-mac]
+description = "Build, package Curdiff.app, and install to /Applications"
+run = """
+pnpm exec vp build
+pnpm make:mac
+rm -rf /Applications/Curdiff.app
+cp -R out/Curdiff-darwin-arm64/Curdiff.app /Applications/
+"""
+
+[tasks.install-win]
+description = "Build, package Curdiff for Windows, and install to %LOCALAPPDATA%\\Programs\\Curdiff (Windows only)"
+run = """
+pnpm make:win
+powershell -NoProfile -Command "& { $dest = Join-Path $env:LOCALAPPDATA 'Programs\\Curdiff'; if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }; Copy-Item -Recurse 'out\\Curdiff-win32-x64' $dest; Write-Host \"Installed Curdiff to $dest\" }"
+"""
+
 [tasks.check]
 description = "Lint, format, typecheck"
 run = "pnpm exec vp check --fix"

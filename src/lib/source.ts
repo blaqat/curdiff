@@ -1,5 +1,6 @@
 import type { ReviewSource } from '../types.ts';
 import type { RepositoryLoadError } from './app-types.ts';
+import { appName, cliCommand } from './branding.ts';
 
 export const getSourceKey = (source: ReviewSource) =>
   source.type === 'commit'
@@ -16,8 +17,7 @@ export const getRepositoryLoadError = (error: unknown): RepositoryLoadError => {
   return /not a git repository/i.test(message)
     ? {
         kind: 'not-a-repository',
-        message:
-          'Codiff was opened outside a Git repository. Run `codiff` from inside a repo, or choose File → Open Folder… to open one.',
+        message: `${appName} was opened outside a Git repository. Run \`${cliCommand}\` from inside a repo, or choose File → Open Folder… to open one.`,
       }
     : {
         kind: 'generic',

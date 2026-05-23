@@ -118,18 +118,18 @@ test('repository changes show the update banner without refreshing the working t
     })),
     getRepositoryState,
     getTerminalHelperStatus: vi.fn(async () => ({
-      command: 'codiff',
+      command: 'curdiff',
       installed: true,
-      path: '/usr/local/bin/codiff',
+      path: '/usr/local/bin/curdiff',
     })),
     getWalkthrough: vi.fn(async () => ({
       reason: 'Unavailable in tests.',
       status: 'unavailable' as const,
     })),
     installTerminalHelper: vi.fn(async () => ({
-      command: 'codiff',
+      command: 'curdiff',
       installed: true,
-      path: '/usr/local/bin/codiff',
+      path: '/usr/local/bin/curdiff',
     })),
     listModels: vi.fn(async () => [
       {
@@ -265,15 +265,15 @@ test('walkthrough launch flag does not auto-fetch walkthrough', async () => {
       source: { type: 'working-tree' as const },
     })),
     getTerminalHelperStatus: vi.fn(async () => ({
-      command: 'codiff',
+      command: 'curdiff',
       installed: true,
-      path: '/usr/local/bin/codiff',
+      path: '/usr/local/bin/curdiff',
     })),
     getWalkthrough,
     installTerminalHelper: vi.fn(async () => ({
-      command: 'codiff',
+      command: 'curdiff',
       installed: true,
-      path: '/usr/local/bin/codiff',
+      path: '/usr/local/bin/curdiff',
     })),
     listModels: vi.fn(async () => [
       {
@@ -395,15 +395,15 @@ test('walkthrough start failure stays on walkthrough tab and shows error', async
       source: { type: 'working-tree' as const },
     })),
     getTerminalHelperStatus: vi.fn(async () => ({
-      command: 'codiff',
+      command: 'curdiff',
       installed: true,
-      path: '/usr/local/bin/codiff',
+      path: '/usr/local/bin/curdiff',
     })),
     getWalkthrough,
     installTerminalHelper: vi.fn(async () => ({
-      command: 'codiff',
+      command: 'curdiff',
       installed: true,
-      path: '/usr/local/bin/codiff',
+      path: '/usr/local/bin/curdiff',
     })),
     listModels: vi.fn(async () => [
       {

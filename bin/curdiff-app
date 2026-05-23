@@ -15,20 +15,21 @@ done
 
 script_dir="$(CDPATH= cd -P "$(dirname "$source_path")" >/dev/null 2>&1 && pwd)"
 app_path="$(CDPATH= cd -P "$script_dir/../../../.." >/dev/null 2>&1 && pwd)"
+cli_command="$(sed -n 's/.*"cliCommand": "\([^"]*\)".*/\1/p' "$script_dir/../branding.json")"
 
-codiff_version() {
+curdiff_version() {
   sed -n 's/^  "version": "\([^"]*\)".*/\1/p' "$script_dir/../package.json"
 }
 
 show_help() {
-  version="$(codiff_version)"
+  version="$(curdiff_version)"
   blue_bold="$(printf '\033[1;34m')"
   gray="$(printf '\033[90m')"
   reset="$(printf '\033[0m')"
 
-  printf '%s\n' "${blue_bold}codiff v${version}${reset} ${gray}A fast local diff viewer.${reset}"
+  printf '%s\n' "${blue_bold}${cli_command} v${version}${reset} ${gray}A fast local diff viewer.${reset}"
   printf '\n'
-  printf '%s\n' "${blue_bold}Usage:${reset} ${gray}codiff [options] [<ref> | <pr> | <url>] [path]${reset}"
+  printf '%s\n' "${blue_bold}Usage:${reset} ${gray}${cli_command} [options] [<ref> | <pr> | <url>] [path]${reset}"
   printf '\n'
   printf '%s\n' "${blue_bold}Options:${reset}"
   printf '  %-22s%s%s%s\n' "--commit <ref>" "$gray" "Review a specific commit." "$reset"
@@ -37,13 +38,13 @@ show_help() {
   printf '  %-22s%s%s%s\n' "--walkthrough, -w" "$gray" "Start with an LLM-generated review walkthrough." "$reset"
   printf '\n'
   printf '%s\n' "${blue_bold}Examples:${reset}"
-  printf '  %-22s%s%s%s\n' "codiff" "$gray" "Review staged and unstaged changes." "$reset"
-  printf '  %-22s%s%s%s\n' "codiff /path/to/repo" "$gray" "Review changes in a specific repository." "$reset"
-  printf '  %-22s%s%s%s\n' "codiff a1b2c3d" "$gray" "Review a specific commit." "$reset"
-  printf '  %-22s%s%s%s\n' "codiff '#75'" "$gray" "Review pull request #75." "$reset"
-  printf '  %-22s%s%s%s\n' "codiff pr 75" "$gray" "Review pull request #75 (alternate syntax)." "$reset"
-  printf '  %-22s%s%s%s\n' "codiff -w" "$gray" "Start with an LLM walkthrough." "$reset"
-  printf '  %-22s%s%s%s\n' "codiff -w a1b2c3d" "$gray" "Walkthrough a specific commit." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command" "$gray" "Review staged and unstaged changes." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command /path/to/repo" "$gray" "Review changes in a specific repository." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command a1b2c3d" "$gray" "Review a specific commit." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command '#75'" "$gray" "Review pull request #75." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command pr 75" "$gray" "Review pull request #75 (alternate syntax)." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command -w" "$gray" "Start with an LLM walkthrough." "$reset"
+  printf '  %-22s%s%s%s\n' "$cli_command -w a1b2c3d" "$gray" "Walkthrough a specific commit." "$reset"
 }
 
 repository_path=""
@@ -97,7 +98,7 @@ for arg in "$@"; do
       exit 0
       ;;
     --version|-v)
-      printf 'codiff v%s\n' "$(codiff_version)"
+      printf '%s v%s\n' "$cli_command" "$(curdiff_version)"
       exit 0
       ;;
     --walkthrough|-w)

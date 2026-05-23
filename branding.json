@@ -1,0 +1,9 @@
+{
+  "appName": "Curdiff",
+  "appBundleId": "dev.nkzw-tech.curdiff",
+  "cliCommand": "curdiff",
+  "cliScriptName": "curdiff-app",
+  "configDirName": ".curdiff",
+  "configFileName": "curdiff.jsonc",
+  "urlScheme": "curdiff"
+}

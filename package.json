@@ -12,10 +12,11 @@
     "url": "git://github.com/cpojer/codiff.git"
   },
   "bin": {
-    "codiff": "./bin/codiff.js"
+    "curdiff": "./bin/codiff.js"
   },
   "files": [
     "bin",
+    "branding.json",
     "dist",
     "electron"
   ],
@@ -31,6 +32,7 @@
     "make": "vp build && electron-forge make",
     "make:ci": "vp build && electron-forge make && electron-forge package --platform=linux --arch=x64 && electron-forge make --platform=win32",
     "make:mac": "vp build && electron-forge make --platform=darwin --arch=arm64",
+    "make:win": "vp build && electron-forge make --platform=win32 --arch=x64",
     "package:app": "vp build && electron-forge package",
     "prepack": "vp build",
     "prepare": "vp config",
@@ -91,8 +93,8 @@
     ]
   },
   "build": {
-    "appId": "dev.nkzw-tech.codiff",
+    "appId": "dev.nkzw-tech.curdiff",
     "copyright": "Copyright © 2026-current Nakazawa Tech",
-    "productName": "Codiff"
+    "productName": "Curdiff"
   }
 }

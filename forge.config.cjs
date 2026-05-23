@@ -4,6 +4,8 @@
 const { existsSync } = require('node:fs');
 const { join } = require('node:path');
 
+const branding = require('./branding.json');
+
 const entitlementsPath = join(__dirname, 'electron/entitlements.plist');
 const iconPath = existsSync(join(__dirname, 'electron/icons/icon.icns'))
   ? './electron/icons/icon'
@@ -73,10 +75,10 @@ module.exports = {
     },
   ],
   packagerConfig: {
-    appBundleId: 'dev.nkzw-tech.codiff',
+    appBundleId: branding.appBundleId,
     appCopyright: 'Copyright (c) 2026-current Nakazawa Tech',
     asar: false,
-    executableName: 'codiff',
+    executableName: branding.cliCommand,
     ...(iconPath ? { icon: iconPath } : {}),
     ignore: [
       /^\/\.DS_Store$/,
@@ -99,7 +101,7 @@ module.exports = {
       /^\/tsconfig/,
       /^\/vite\.config\./,
     ],
-    name: 'Codiff',
+    name: branding.appName,
     ...(osxNotarize ? { osxNotarize } : {}),
     ...(process.env.APPLE_SIGNING_IDENTITY
       ? {
@@ -115,8 +117,8 @@ module.exports = {
       : {}),
     protocols: [
       {
-        name: 'Codiff',
-        schemes: ['codiff'],
+        name: branding.appName,
+        schemes: [branding.urlScheme],
       },
     ],
   },

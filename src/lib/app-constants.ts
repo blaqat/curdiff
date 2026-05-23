@@ -1,4 +1,5 @@
 import type { CodiffLaunchOptions, CodiffPreferences, TerminalHelperStatus } from '../types.ts';
+import { cliCommand } from './branding.ts';
 
 export const HISTORY_PAGE_SIZE = 30;
 
@@ -8,7 +9,7 @@ export const defaultLaunchOptions: CodiffLaunchOptions = {
 };
 
 export const defaultTerminalHelperStatus: TerminalHelperStatus = {
-  command: 'codiff',
+  command: cliCommand,
   installed: false,
   path: '',
 };

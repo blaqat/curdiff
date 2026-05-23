@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import electron from 'electron';
 import packageJson from '../package.json' with { type: 'json' };
 import { formatHelpText, parseArguments, resolvePullRequestUrl } from './arguments.js';
+import { appName, cliCommand } from './branding.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -19,7 +20,7 @@ const run = () => {
   }
 
   if (parsedArguments.version) {
-    process.stdout.write(`codiff v${packageJson.version}\n`);
+    process.stdout.write(`${cliCommand} v${packageJson.version}\n`);
     return;
   }
 
@@ -36,7 +37,7 @@ const run = () => {
   }
 
   if (!existsSync(resolve(root, 'dist/index.html')) && !process.env.ELECTRON_RENDERER_URL) {
-    console.error('Codiff has not been built yet. Run `pnpm build` first.');
+    console.error(`${appName} has not been built yet. Run \`pnpm build\` first.`);
     process.exit(1);
   }
 

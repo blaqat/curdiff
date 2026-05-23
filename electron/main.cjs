@@ -58,6 +58,7 @@ const {
 const { createEditorOpener } = require('./main/editor.cjs');
 const { createTerminalHelper } = require('./main/terminal-helper.cjs');
 const { readWalkthrough } = require('./walkthrough.cjs');
+const branding = require('../branding.json');
 
 /**
  * @typedef {import('../src/config/types.ts').CodiffConfig} CodiffConfig
@@ -229,7 +230,7 @@ const buildApplicationMenu = () =>
       ...(process.platform === 'darwin'
         ? [
             {
-              label: 'Codiff',
+              label: branding.appName,
               submenu: [
                 { role: 'about' },
                 { type: 'separator' },
@@ -396,7 +397,7 @@ const createWindow = (
     minHeight: 520,
     minWidth: 880,
     show: false,
-    title: `Codiff - ${repositoryPath}`,
+    title: `${branding.appName} - ${repositoryPath}`,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 25, y: 24 } } : {}),
     webPreferences: {
@@ -511,7 +512,7 @@ const lock =
 if (squirrelStartup || !lock) {
   app.quit();
 } else {
-  app.setName('Codiff');
+  app.setName(branding.appName);
 
   app.on('second-instance', (event, commandLine, workingDirectory, additionalData) => {
     const data = /** @type {SingleInstanceAdditionalData} */ (additionalData || {});
