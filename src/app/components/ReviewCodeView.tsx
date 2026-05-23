@@ -50,6 +50,7 @@ import {
   maxWorkerThreads,
   sectionLabel,
   statusLabel,
+  syntaxTheme,
   workerHighlighterOptions,
 } from '../../lib/code-view-options.ts';
 import {
@@ -1196,10 +1197,7 @@ export function ReviewCodeView({
           );
         },
         stickyHeaders: true,
-        theme: {
-          dark: 'Dunkel',
-          light: 'Licht',
-        },
+        theme: syntaxTheme,
         themeType: 'system',
         tokenizeMaxLength: 100_000,
         unsafeCSS: codeViewUnsafeCSS,

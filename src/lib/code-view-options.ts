@@ -1,10 +1,10 @@
-import { registerCustomTheme, type FileOptions } from '@pierre/diffs';
-import dunkelTheme from '../themes/dunkel.json' with { type: 'json' };
-import lichtTheme from '../themes/licht.json' with { type: 'json' };
+import { type FileOptions } from '@pierre/diffs';
 import type { DiffSection, GitFileStatus } from '../types.ts';
 
-registerCustomTheme('Licht', async () => lichtTheme as never);
-registerCustomTheme('Dunkel', async () => dunkelTheme as never);
+export const syntaxTheme = {
+  dark: 'min-dark',
+  light: 'min-light',
+} as const;
 
 export const statusLabel: Record<GitFileStatus, string> = {
   added: 'Added',
@@ -44,10 +44,7 @@ export const diffCollapsedContextThreshold = 12;
 
 export const workerHighlighterOptions = {
   maxLineDiffLength: 2000,
-  theme: {
-    dark: 'Dunkel',
-    light: 'Licht',
-  },
+  theme: syntaxTheme,
   tokenizeMaxLineLength: 20_000,
   useTokenTransformer: false,
 };
@@ -58,10 +55,7 @@ export const markdownCodeBlockOptions = {
   enableGutterUtility: false,
   lineHoverHighlight: 'disabled',
   overflow: 'wrap',
-  theme: {
-    dark: 'Dunkel',
-    light: 'Licht',
-  },
+  theme: syntaxTheme,
   themeType: 'system',
   tokenizeMaxLength: 100_000,
   tokenizeMaxLineLength: 20_000,
@@ -150,7 +144,7 @@ export const codeViewUnsafeCSS = `
     --diffs-font-size: 13px;
     --diffs-line-height: 20px;
     --diffs-light-bg: #ffffff;
-    --diffs-dark-bg: #1c1c1c;
+    --diffs-dark-bg: #1f1f1f;
     --diffs-bg-selection-override: rgb(61 135 245 / 0.34);
     --diffs-bg-selection-number-override: rgb(61 135 245 / 0.46);
   }
