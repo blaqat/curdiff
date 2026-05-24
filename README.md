@@ -174,7 +174,7 @@ export CURSOR_API_KEY="cursor_..."   # from Cursor Dashboard → Integrations
 codiff -w
 ```
 
-When launching from Terminal, `bin/codiff.js` passes your shell environment to Electron. If you open the packaged app from Finder, export `CURSOR_API_KEY` in your shell profile or set it system-wide (e.g. `launchctl setenv` on macOS).
+When launching from Terminal, `bin/codiff.js` passes your shell environment to Electron. When opening the packaged app from Finder or Dock, Codiff resolves your login shell environment (the same approach VS Code uses), so `export CURSOR_API_KEY=...` in `.zshrc` or `.zprofile` is enough. Set `CODIFF_DISABLE_SHELL_ENV=1` to turn that off.
 
 ## Development
 

@@ -2,7 +2,7 @@ import { type FileOptions } from '@pierre/diffs';
 import type { DiffSection, GitFileStatus } from '../types.ts';
 
 export const syntaxTheme = {
-  dark: 'min-dark',
+  dark: 'github-dark-default',
   light: 'min-light',
 } as const;
 

@@ -121,7 +121,11 @@ export function CursorUnavailablePanel({ onShowFiles }: { onShowFiles: () => voi
         <a href="https://cursor.com/dashboard/integrations">Cursor Dashboard → Integrations</a>,
         then restart {appName}.
       </p>
-      <p>When launching from Terminal, export the key in your shell profile or pass it inline:</p>
+      <p>
+        Export the key in your shell profile (for example{' '}
+        <code className="walkthrough-inline-code">.zshrc</code>
+        ), then restart {appName}:
+      </p>
       <p>
         <code className="walkthrough-inline-code">
           export CURSOR_API_KEY=&quot;cursor_...&quot;

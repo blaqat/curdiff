@@ -45,6 +45,7 @@ const run = () => {
     detached: true,
     env: {
       ...process.env,
+      CODIFF_CLI: '1',
       CODIFF_COMMIT_REF: commitRef ?? '',
       CODIFF_PULL_REQUEST_URL: pullRequestUrl ?? '',
       CODIFF_REPOSITORY_PATH: requestedPath,

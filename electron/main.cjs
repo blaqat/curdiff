@@ -1,5 +1,8 @@
 // @ts-check
 
+const { inheritLoginShellEnv } = require('./main/login-shell-env.cjs');
+inheritLoginShellEnv();
+
 const { existsSync } = require('node:fs');
 const { dirname, join, relative, resolve } = require('node:path');
 const { pathToFileURL } = require('node:url');
